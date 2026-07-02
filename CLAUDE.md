@@ -1,0 +1,60 @@
+# CLAUDE.md — Lead Intelligence Pipeline (repo instructions for Claude Code)
+
+## What this is
+AI-powered lead pipeline: new lead → enriched → scored vs configurable ICP → personalized draft email → HubSpot, in <90 seconds. Portfolio anchor project for Wop (Full-Stack/Automation/RevOps/Growth Engineer roles). Phase 2 = deploy for a real business, so EVERYTHING is config-driven, never hardcoded.
+
+## Your role vs the architect chat
+You (Claude Code) do ALL implementation: code, terminals, servers, debugging, commits — one GitHub issue at a time. Design decisions, prompt engineering, sprint planning, and doc drafting happen in a separate architect chat with Wop. If a task requires a genuine design/architecture decision not covered by docs/, STOP and surface it to Wop — do not decide under momentum.
+
+## Stack (decided — do not re-litigate)
+Next.js/Vercel · Supabase (Postgres, source of truth) · n8n self-hosted Docker on Hetzner · HubSpot Free · Claude API · Resend
+
+## Architecture (5 components)
+1. INTAKE: Next.js form + universal webhook. Schema: {name, email, company, domain, source, message, timestamp}
+2. ENRICHMENT (n8n): website scrape (home/about/pricing) w/ retries+timeouts+graceful partial failure; tech-stack detection; news via search API. Dedupe: same email/domain in 30 days = update not insert. Paid enrichment (Clearbit/Apollo) must be swap-in-able.
+3. INTELLIGENCE (Claude API): one structured call → strict JSON {icp_score 0-100, score_reasoning, company_summary, buying_signals[], objection_risks[], draft_email}. ICP lives in config JSON (docs/ICP-CONFIG.md). Validate + retry malformed output. Log tokens/cost per lead.
+4. CRM DELIVERY: HubSpot properties + note w/ draft email; score ≥75 → instant alert; ALL errors alert Wop. No silent failures, ever.
+5. REPORTING: Next.js dashboard (volume, score distribution, source quality, latency); weekly n8n cron → Claude-written summary → Resend.
+
+Full rationale: docs/ARCHITECTURE.md. Read it before structural work.
+
+## Success metrics
+<90s form-to-CRM · <$0.02/lead · >85% enrichment success · zero silent failures
+
+## Working rules
+- Work ONE GitHub issue at a time (single-piece flow). The issue's acceptance criteria are the spec. Reference the issue in commits; close with "Closes #N".
+- Board (GitHub Projects: Backlog → Sprint → In Progress → Done) is the single source of truth. Move the issue to In Progress when starting.
+- Mid-task ideas → create a Backlog issue via `gh issue create`, do NOT implement.
+- Definition of Done: merged to main, deployed, verified end-to-end, errors alert, docs updated, issue closed.
+- Config-driven everything: ICP, credentials, client identity, thresholds. If you're about to hardcode a value that could differ per tenant, put it in config/env instead.
+- No silent failures: every workflow/route gets an error path that alerts. If you can't alert yet (early sprints), log loudly and leave a TODO issue.
+- Legal data sources only. No LinkedIn scraping, ever.
+- Cost discipline: free tiers, cheapest options, batch/cache Claude calls where possible.
+
+## Docs to maintain
+- docs/RUNBOOK.md — update when infra changes (server setup, docker, env, restore steps)
+- docs/DECISIONS.md — one line per significant choice (date, decision, why)
+- .env.example — keep current with every new env var
+- LOG.md — Wop's daily standup lines (don't edit)
+- RETROS.md — Friday retros (don't edit)
+
+## Conventions
+- TypeScript everywhere in the Next.js app; zod for validation at every boundary (webhook payloads, Claude JSON output, ICP config load).
+- Supabase migrations in repo (`supabase/migrations/`), never dashboard-only schema changes.
+- n8n workflows exported as JSON into `n8n/workflows/` after every change — workflows must be restorable from the repo.
+- Secrets only in env; .env.example documents every var with a comment.
+- Commits: small, imperative mood, reference issue number.
+
+## Current status
+Sprint 1 — Goal: form submission lands in Supabase and HubSpot raw.
+Now on: issue #1 (Hetzner + Docker + n8n).
+[UPDATE THIS EVERY SESSION]
+
+## Don't do this
+- Don't re-litigate the stack or architecture — surface concerns to Wop instead.
+- Don't implement backlog ideas mid-sprint.
+- Don't scrape LinkedIn or any auth-walled source.
+- Don't hardcode tenant-specific values (ICP, names, thresholds, sender identity).
+- Don't make schema changes without a migration file.
+- Don't swallow errors. No empty catch blocks.
+[grows over time]
