@@ -1,0 +1,44 @@
+{
+  "name": "Lead Intake - Error Alert",
+  "nodes": [
+    {
+      "id": "error-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [-160, 0],
+      "parameters": {}
+    },
+    {
+      "id": "send-alert-email",
+      "name": "Resend - Send Alert Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [80, 0],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.resend.com/emails",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"from\": \"Lead Intake Pipeline <onboarding@resend.dev>\", \"to\": [\"juan.avila619@gmail.com\"], \"subject\": \"Lead Intake Pipeline failure - \" + $json.workflow.name, \"html\": \"<p>Workflow <b>\" + $json.workflow.name + \"</b> failed.</p><p>Failing node: \" + ($json.execution && $json.execution.lastNodeExecuted ? $json.execution.lastNodeExecuted : \"unknown\") + \"</p><p>Error: \" + JSON.stringify($json.execution && $json.execution.error ? $json.execution.error.message : $json) + \"</p><p>Execution: \" + ($json.execution && $json.execution.url ? $json.execution.url : \"see n8n executions list\") + \"</p>\" } }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PLACEHOLDER_SET_IN_N8N",
+          "name": "Resend API Key"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [[{ "node": "Resend - Send Alert Email", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

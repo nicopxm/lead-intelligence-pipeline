@@ -15,6 +15,7 @@ Operational reference: infra provisioning, restore-from-scratch, and day-2 proce
 - [x] Docker + n8n setup and restart/reboot recovery (#2)
 - [x] Supabase project setup + migration workflow (#3)
 - [x] HubSpot Service Key setup + contact verification (#4)
+- [x] Universal webhook intake workflow (#7)
 - [ ] Vercel CI/CD connection (#5)
 - [ ] Restore-from-scratch procedure (full stack)
 
@@ -85,6 +86,26 @@ docker compose up -d
 5. **n8n compatibility**: n8n's HubSpot node has three auth options — OAuth 2.0, App Token, API Key (legacy, deprecated by HubSpot). The "App Token" option accepts a Service Key directly (n8n renamed the label to "Service Key" to match HubSpot's terminology; the underlying credential type is unchanged) — no HTTP Request node workaround needed. Service Keys don't support webhooks, but our integration only pushes contacts out to HubSpot, so this doesn't apply.
 6. Custom contact properties created via `POST https://api.hubapi.com/crm/v3/properties/contacts`: `lead_source` (string/text), `icp_score` (number) — the latter unused until Sprint 4 scoring lands.
 7. Verified auth end-to-end: created a test contact via `POST /crm/v3/objects/contacts`, confirmed `lead_source` round-tripped correctly, then deleted it via `DELETE /crm/v3/objects/contacts/{id}` (204). Both properties and the Service Key confirmed working.
+
+## Universal webhook intake workflow (#7)
+
+**Workflows**: exported to `n8n/workflows/lead-intake.json` and `n8n/workflows/lead-intake-error-alert.json` — restorable from the repo via n8n's Import from File.
+
+1. In the n8n editor, import both files (Overflow menu → Import from File, or drag-and-drop onto the canvas). Each import lands as a new workflow named `Lead Intake` and `Lead Intake - Error Alert`.
+2. `Lead Intake` needs two credentials wired in, created directly in n8n (values are never pasted into chat/commits):
+   - **Supabase Leads** (Supabase credential type): Host = `SUPABASE_URL`, Service Role Secret = `SUPABASE_SERVICE_ROLE_KEY`. Used by both the "Supabase - Insert Lead" and "Supabase - Mark Lead Error" nodes — select it on each after import.
+   - **HubSpot Service Key** (HubSpot node, App Token/Service Key auth): the Service Key from issue #4. Select it on the "HubSpot - Create Contact" node.
+3. `Lead Intake - Error Alert` needs one credential:
+   - **Resend API Key** (Generic Header Auth credential): Name = `Authorization`, Value = `Bearer <RESEND_API_KEY>`. Select it on the "Resend - Send Alert Email" node. Sender is Resend's default `onboarding@resend.dev` (no domain verification needed; only sends to the account owner's own inbox, which is exactly Wop's alert use case).
+4. In `Lead Intake`'s workflow Settings, set **Error Workflow** to `Lead Intake - Error Alert` (dropdown by name — the JSON ships a placeholder since n8n assigns workflow IDs at import time).
+5. Activate both workflows.
+6. Webhook URL: `https://<N8N_HOST>/webhook/lead-intake` (POST). Payload schema: `{name, email, company, domain, source, message, timestamp}` — `name`/`email`/`source`/`timestamp` required, `company`/`domain`/`message` optional.
+7. Behavior:
+   - Malformed payload → `Validate Payload` (Code node) flags it invalid → 400 JSON response with `details` (visible in n8n executions regardless of outcome, since the webhook always creates an execution).
+   - Valid payload → insert into Supabase `leads` (`status=raw`) → create/upsert HubSpot contact (`lead_source` custom property) → 200 JSON response with the lead id.
+   - Supabase insert failure → node throws, execution fails → `Lead Intake - Error Alert` fires automatically (n8n's Error Workflow mechanism) → Resend email to Wop.
+   - HubSpot failure (after Supabase insert succeeded) → the lead row is updated to `status=error` (dead-letter, per docs/ARCHITECTURE.md #8, replayable after fix) before the execution is deliberately failed (Stop and Error node) → same alert path fires.
+8. Manual verification: `curl -X POST https://<N8N_HOST>/webhook/lead-intake -H 'Content-Type: application/json' -d '{"name":"Test Lead","email":"test@example.com","company":"Acme","domain":"acme.com","source":"curl-test","message":"hi","timestamp":"2026-07-03T12:00:00Z"}'` should return 200 and create a Supabase row + HubSpot contact. A payload missing `email` should return 400 and show up in n8n's Executions list as a completed (not silently dropped) run.
 
 ## Restore-from-scratch
 1. Provision a new Hetzner VPS per "Hetzner provisioning" above (or restore from a Hetzner snapshot/backup if one exists — none configured yet, see backlog).
