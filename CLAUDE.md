@@ -47,8 +47,8 @@ Full rationale: docs/ARCHITECTURE.md. Read it before structural work.
 
 ## Current status
 Sprint 1 — Goal: form submission lands in Supabase and HubSpot raw.
-Done: #1 (scaffolding), #2 (Hetzner + Docker + n8n), #3 (Supabase project + leads schema migration).
-Now on: issue #4 (HubSpot private app setup).
+Done: #1 (scaffolding), #2 (Hetzner + Docker + n8n), #3 (Supabase project + leads schema migration), #4 (HubSpot Service Key + contact verification — used a Service Key instead of the legacy private app named in the issue, see docs/DECISIONS.md).
+Now on: next Sprint 1 issue (universal webhook intake, #7) or whatever Wop assigns next.
 [UPDATE THIS EVERY SESSION]
 
 ## Don't do this

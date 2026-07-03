@@ -14,7 +14,7 @@ Operational reference: infra provisioning, restore-from-scratch, and day-2 proce
 - [x] Hetzner provisioning steps (#2)
 - [x] Docker + n8n setup and restart/reboot recovery (#2)
 - [x] Supabase project setup + migration workflow (#3)
-- [ ] HubSpot private app setup (#4)
+- [x] HubSpot Service Key setup + contact verification (#4)
 - [ ] Vercel CI/CD connection (#5)
 - [ ] Restore-from-scratch procedure (full stack)
 
@@ -72,6 +72,20 @@ docker compose up -d
 - `docker compose restart` (inside `~/n8n`): both containers restart, `n8n_data` volume is untouched (verified via checksum of `/home/node/.n8n/config`, which contains the persistent encryption key), HTTPS + basic auth continue to work immediately.
 - **Full VPS reboot** (`sudo reboot`): Docker daemon is enabled at boot, and both services use `restart: unless-stopped`, so `docker compose up -d` is not needed manually — containers come back on their own. Verified: same config checksum after reboot (data intact), `ufw` and `fail2ban` both `active` on boot, HTTPS cert still valid, basic auth still enforced (401 without/with wrong creds, 200 with correct creds).
 
+## HubSpot Service Key setup + contact verification (#4)
+
+**Auth**: HubSpot's private-app creation flow now flags UI-created private apps as legacy (no new scopes/features going forward) and steers new integrations to **Service Keys** — the modern credential for account-level, system-to-system API access. We use a Service Key, not a legacy private app (see docs/DECISIONS.md).
+
+1. Create a free HubSpot account at hubspot.com (skip the AI-assisted/guided marketing setup — not needed).
+2. Settings → Integrations → create a **Service Key** (not a legacy private app) named `lead-intelligence-pipeline`.
+3. Scopes, least privilege:
+   - `crm.objects.contacts.read` + `crm.objects.contacts.write` — read/write contact records.
+   - `crm.schemas.contacts.write` — required separately to create/modify contact *property definitions* (schema operations are distinct from object read/write; creating `lead_source`/`icp_score` below fails with a `MISSING_SCOPES` 403 without it).
+4. Copy the key value once shown (HubSpot only displays it once). Store as `HUBSPOT_TOKEN` in `.env` per `.env.example` — server-side only, never committed, never in n8n workflow JSON (use n8n credentials).
+5. **n8n compatibility**: n8n's HubSpot node has three auth options — OAuth 2.0, App Token, API Key (legacy, deprecated by HubSpot). The "App Token" option accepts a Service Key directly (n8n renamed the label to "Service Key" to match HubSpot's terminology; the underlying credential type is unchanged) — no HTTP Request node workaround needed. Service Keys don't support webhooks, but our integration only pushes contacts out to HubSpot, so this doesn't apply.
+6. Custom contact properties created via `POST https://api.hubapi.com/crm/v3/properties/contacts`: `lead_source` (string/text), `icp_score` (number) — the latter unused until Sprint 4 scoring lands.
+7. Verified auth end-to-end: created a test contact via `POST /crm/v3/objects/contacts`, confirmed `lead_source` round-tripped correctly, then deleted it via `DELETE /crm/v3/objects/contacts/{id}` (204). Both properties and the Service Key confirmed working.
+
 ## Restore-from-scratch
 1. Provision a new Hetzner VPS per "Hetzner provisioning" above (or restore from a Hetzner snapshot/backup if one exists — none configured yet, see backlog).
 2. Harden per the steps above (non-root user, ufw, fail2ban, disable password/root SSH).
@@ -82,5 +96,5 @@ docker compose up -d
 7. `cd ~/n8n && docker compose up -d`.
 8. Update the Porkbun A record to the new server's IP if the IP changed.
 9. Apply Supabase migrations from `supabase/migrations/`.
-10. Verify HubSpot private app token still valid.
+10. Verify HubSpot Service Key still valid.
 11. Redeploy Next.js app on Vercel (auto on push to main).

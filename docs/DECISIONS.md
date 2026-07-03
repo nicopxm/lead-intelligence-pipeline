@@ -3,4 +3,5 @@
 2026-07-02 — Budget: ~€5/mo Hetzner + ~$10 domain + ~$5-15 Claude API total. Rejected Oracle free tier (reliability risk) and going domainless (breaks Resend + demo credibility). Cost target is $/lead measured, not $0 spend.
 2026-07-02 — Domain: nicopxm.me via Porkbun (at-cost, free WHOIS privacy, DNS colocated). n8n at n8n.<yourdomain>; root domain reserved for intake form + Resend sender identity.
 2026-07-02 — Considered Railway over Hetzner VPS. Rejected: usage pricing punishes always-on n8n, and self-hosted VPS ops is a deliberate portfolio asset (issue #2 runbook = interview material). Hetzner stands.
+2026-07-03 — Issue #4 built with a HubSpot Service Key instead of a legacy private app. Why: HubSpot's private-app creation flow now flags private apps as legacy (no new scopes/features) and steers new integrations to Service Keys, which cover our use case (scoped, system-to-system contact read/write, no webhooks needed). n8n's HubSpot node "App Token" auth already accepts Service Keys — same mechanism, renamed. Confirmed via HubSpot's own docs/changelog, not a re-litigation of the stack (CRM choice unchanged, only the credential type).
 
