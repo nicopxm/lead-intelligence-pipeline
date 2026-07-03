@@ -47,7 +47,8 @@ Full rationale: docs/ARCHITECTURE.md. Read it before structural work.
 
 ## Current status
 Sprint 1 — Goal: form submission lands in Supabase and HubSpot raw.
-Now on: issue #1 (Hetzner + Docker + n8n).
+Done: #1 (scaffolding), #2 (Hetzner + Docker + n8n), #3 (Supabase project + leads schema migration).
+Now on: issue #4 (HubSpot private app setup).
 [UPDATE THIS EVERY SESSION]
 
 ## Don't do this
