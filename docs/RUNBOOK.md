@@ -13,7 +13,7 @@ Operational reference: infra provisioning, restore-from-scratch, and day-2 proce
 ## Sections (fill in as each lands)
 - [x] Hetzner provisioning steps (#2)
 - [x] Docker + n8n setup and restart/reboot recovery (#2)
-- [ ] Supabase project setup + migration workflow (#3)
+- [x] Supabase project setup + migration workflow (#3)
 - [ ] HubSpot private app setup (#4)
 - [ ] Vercel CI/CD connection (#5)
 - [ ] Restore-from-scratch procedure (full stack)
@@ -56,6 +56,17 @@ Deploy / redeploy:
 cd ~/n8n
 docker compose up -d
 ```
+
+## Supabase project setup + migration workflow (#3)
+
+**Project**: Supabase free tier. Postgres is the pipeline's source of truth (see docs/ARCHITECTURE.md #1); HubSpot is write-only downstream.
+
+1. Create the project at supabase.com (free tier, nearest region to the VPS/users).
+2. From Project Settings → API, note the Project URL and the service-side key that bypasses RLS. Supabase now ships two key systems: legacy JWT-based `anon`/`service_role` keys, and newer **publishable**/**secret** keys (`sb_secret_...` prefix). Prefer disabling legacy API keys and using the new **secret key** — it's the equivalent of the old `service_role` key (bypasses RLS, server-side only) but rotates via a standby-key-then-rotate flow instead of a single irreversible JWT-secret reset. Put the Project URL and secret key in `.env` per `.env.example` (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`) — never in the browser, never committed.
+3. Apply migrations from `supabase/migrations/` in order. Without the Supabase CLI installed locally, paste each migration's SQL into the Supabase dashboard's SQL Editor and run it; if the CLI is available (`supabase link` + `supabase db push`), that's the preferred path going forward since it keeps `supabase/migrations/` as the single source of truth and avoids drift from ad hoc dashboard edits.
+4. Schema: `leads` table — see `supabase/migrations/20260703163152_create_leads.sql` for the authoritative definition. Columns: `id` (uuid pk), intake fields (`name`, `email`, `company`, `domain`, `source`, `message`, `submitted_at`), `status` (enum: raw/enriched/scored/delivered/error), `enrichment` and `intelligence` (jsonb, reserved for later sprints), `created_at`/`updated_at`.
+5. Dedupe lookup: `leads_email_domain_idx` on `(email, domain)` supports the "same email+domain within 30 days = update, not insert" rule (docs/ARCHITECTURE.md #6). The upsert logic itself is enforced by the intake workflow, landing in Sprint 2 — the migration only documents the strategy and indexes the lookup.
+6. RLS is enabled on `leads` with no policies, so `anon`/`authenticated` roles get zero access via PostgREST by default. All pipeline reads/writes use the service-role key server-side, which bypasses RLS entirely.
 
 ### Restart / reboot recovery — verified
 - `docker compose restart` (inside `~/n8n`): both containers restart, `n8n_data` volume is untouched (verified via checksum of `/home/node/.n8n/config`, which contains the persistent encryption key), HTTPS + basic auth continue to work immediately.
