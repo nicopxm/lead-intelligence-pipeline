@@ -48,7 +48,8 @@ Full rationale: docs/ARCHITECTURE.md. Read it before structural work.
 ## Current status
 Sprint 1 — Goal: form submission lands in Supabase and HubSpot raw.
 Done: #1 (scaffolding), #2 (Hetzner + Docker + n8n), #3 (Supabase project + leads schema migration), #4 (HubSpot Service Key + contact verification — used a Service Key instead of the legacy private app named in the issue, see docs/DECISIONS.md).
-Now on: next Sprint 1 issue (universal webhook intake, #7) or whatever Wop assigns next.
+In progress: #7 (universal webhook intake) — workflow JSON built and pushed (n8n/workflows/lead-intake.json, lead-intake-error-alert.json), docs/RUNBOOK.md updated. Blocked on Wop importing the workflows into n8n and wiring 3 credentials (Supabase, HubSpot, Resend) directly in the n8n UI, then running/confirming the curl verification before the issue can close.
+Now on: finishing #7 once credentials are wired, then whatever Wop assigns next.
 [UPDATE THIS EVERY SESSION]
 
 ## Don't do this
