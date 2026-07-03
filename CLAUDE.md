@@ -25,7 +25,7 @@ Full rationale: docs/ARCHITECTURE.md. Read it before structural work.
 - Work ONE GitHub issue at a time (single-piece flow). The issue's acceptance criteria are the spec. Reference the issue in commits; close with "Closes #N".
 - Board (GitHub Projects: Backlog → Sprint → In Progress → Done) is the single source of truth. Move the issue to In Progress when starting.
 - Mid-task ideas → create a Backlog issue via `gh issue create`, do NOT implement.
-- Definition of Done: merged to main, deployed, verified end-to-end, errors alert, docs updated, issue closed.
+- Definition of Done: merged to main, pushed to origin, deployed, verified end-to-end, errors alert, docs updated, issue closed. Never end an issue with unpushed commits.
 - Config-driven everything: ICP, credentials, client identity, thresholds. If you're about to hardcode a value that could differ per tenant, put it in config/env instead.
 - No silent failures: every workflow/route gets an error path that alerts. If you can't alert yet (early sprints), log loudly and leave a TODO issue.
 - Legal data sources only. No LinkedIn scraping, ever.
@@ -58,4 +58,5 @@ Now on: issue #4 (HubSpot private app setup).
 - Don't hardcode tenant-specific values (ICP, names, thresholds, sender identity).
 - Don't make schema changes without a migration file.
 - Don't swallow errors. No empty catch blocks.
+- Don't echo secret values into output — verify presence/shape only (e.g. pattern-match a prefix, check non-empty), never print or feed into a command that could leak it on error (curl -v, unvalidated var extraction).
 [grows over time]
