@@ -2,19 +2,17 @@
   "name": "Lead Intake - Error Alert",
   "nodes": [
     {
-      "id": "error-trigger",
+      "parameters": {},
+      "id": "0aadeea7-c689-4ce5-87df-ab53989df16e",
       "name": "Error Trigger",
       "type": "n8n-nodes-base.errorTrigger",
       "typeVersion": 1,
-      "position": [-160, 0],
-      "parameters": {}
+      "position": [
+        -272,
+        112
+      ]
     },
     {
-      "id": "send-alert-email",
-      "name": "Resend - Send Alert Email",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [80, 0],
       "parameters": {
         "method": "POST",
         "url": "https://api.resend.com/emails",
@@ -25,20 +23,47 @@
         "jsonBody": "={{ { \"from\": \"Lead Intake Pipeline <onboarding@resend.dev>\", \"to\": [\"juan.avila619@gmail.com\"], \"subject\": \"Lead Intake Pipeline failure - \" + $json.workflow.name, \"html\": \"<p>Workflow <b>\" + $json.workflow.name + \"</b> failed.</p><p>Failing node: \" + ($json.execution && $json.execution.lastNodeExecuted ? $json.execution.lastNodeExecuted : \"unknown\") + \"</p><p>Error: \" + JSON.stringify($json.execution && $json.execution.error ? $json.execution.error.message : $json) + \"</p><p>Execution: \" + ($json.execution && $json.execution.url ? $json.execution.url : \"see n8n executions list\") + \"</p>\" } }}",
         "options": {}
       },
+      "id": "f3f9fedd-53d3-446c-868d-18bde6455381",
+      "name": "Resend - Send Alert Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        0
+      ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "PLACEHOLDER_SET_IN_N8N",
+          "id": "kdGfVybKo52HoDE6",
           "name": "Resend API Key"
         }
       }
     }
   ],
+  "pinData": {},
   "connections": {
     "Error Trigger": {
-      "main": [[{ "node": "Resend - Send Alert Email", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Resend - Send Alert Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
+  "active": true,
   "settings": {
-    "executionOrder": "v1"
-  }
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "13874465-b53a-4b0e-a369-8fd909aa13a3",
+  "meta": {
+    "instanceId": "68dc6225d3bd91f509f1622e5bc9ca13d6bb79e6e162b7d2abe02d53fb814dcd"
+  },
+  "nodeGroups": [],
+  "id": "Yl0d71QmNV63K9MI",
+  "tags": []
 }

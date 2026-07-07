@@ -1,7 +1,18 @@
 {$N8N_HOST} {
-	basicauth {
-		{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
-	}
+	# route{} disables Caddy's automatic directive sorting so these run in the
+	# literal order below: webhook paths reverse_proxy (and stop) before
+	# basicauth ever runs, everything else falls through to basicauth.
+	#
+	# Webhook endpoints must stay public: any lead source (form, partner Typeform,
+	# Calendly, etc.) posts here directly and has no n8n editor credentials.
+	# Payload validation happens inside the workflow itself (see issue #7).
+	route {
+		@webhooks path /webhook/* /webhook-test/*
+		reverse_proxy @webhooks n8n:5678
 
-	reverse_proxy n8n:5678
+		basicauth {
+			{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
+		}
+		reverse_proxy n8n:5678
+	}
 }

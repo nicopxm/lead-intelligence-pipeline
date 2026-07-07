@@ -2,34 +2,36 @@
   "name": "Lead Intake",
   "nodes": [
     {
-      "id": "webhook-lead-intake",
-      "name": "Webhook - Lead Intake",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "position": [-160, 0],
       "parameters": {
         "httpMethod": "POST",
         "path": "lead-intake",
         "responseMode": "responseNode",
         "options": {}
-      }
+      },
+      "id": "e20b1254-05f8-47ea-9b8e-831ff13315f7",
+      "name": "Webhook - Lead Intake",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1120,
+        160
+      ],
+      "webhookId": "af8f6513-8a18-4153-9bfb-30257d55fc8a"
     },
     {
-      "id": "code-validate-payload",
+      "parameters": {
+        "jsCode": "// Universal webhook schema: {name, email, company, domain, source, message, timestamp}\n// company/domain/message are optional; name/email/source/timestamp are required.\nconst errors = [];\nconst item = $input.item.json.body || $input.item.json;\n\nfunction str(v) {\n  return typeof v === 'string' ? v.trim() : '';\n}\n\nconst name = str(item.name);\nconst email = str(item.email);\nconst source = str(item.source);\nconst timestamp = str(item.timestamp);\nconst company = str(item.company) || null;\nconst domain = str(item.domain) || null;\nconst message = str(item.message) || null;\n\nif (!name) errors.push('name is required');\nif (!email) errors.push('email is required');\nelse if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) errors.push('email is not a valid address');\nif (!source) errors.push('source is required');\nif (!timestamp) errors.push('timestamp is required');\nelse if (isNaN(Date.parse(timestamp))) errors.push('timestamp is not a valid date');\n\nconst valid = errors.length === 0;\n\nreturn [{\n  json: {\n    valid,\n    errors,\n    name,\n    email,\n    company,\n    domain,\n    source,\n    message,\n    submitted_at: valid ? new Date(timestamp).toISOString() : null\n  }\n}];"
+      },
+      "id": "547fe455-b063-4a0c-8da4-c0a5ed33e2d2",
       "name": "Validate Payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [80, 0],
-      "parameters": {
-        "jsCode": "// Universal webhook schema: {name, email, company, domain, source, message, timestamp}\n// company/domain/message are optional; name/email/source/timestamp are required.\nconst errors = [];\nconst item = $input.item.json;\n\nfunction str(v) {\n  return typeof v === 'string' ? v.trim() : '';\n}\n\nconst name = str(item.name);\nconst email = str(item.email);\nconst source = str(item.source);\nconst timestamp = str(item.timestamp);\nconst company = str(item.company) || null;\nconst domain = str(item.domain) || null;\nconst message = str(item.message) || null;\n\nif (!name) errors.push('name is required');\nif (!email) errors.push('email is required');\nelse if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) errors.push('email is not a valid address');\nif (!source) errors.push('source is required');\nif (!timestamp) errors.push('timestamp is required');\nelse if (isNaN(Date.parse(timestamp))) errors.push('timestamp is not a valid date');\n\nconst valid = errors.length === 0;\n\nreturn [{\n  json: {\n    valid,\n    errors,\n    name,\n    email,\n    company,\n    domain,\n    source,\n    message,\n    submitted_at: valid ? new Date(timestamp).toISOString() : null\n  }\n}];"
-      }
+      "position": [
+        -880,
+        160
+      ]
     },
     {
-      "id": "if-is-valid",
-      "name": "Is Valid?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [300, 0],
       "parameters": {
         "conditions": {
           "options": {
@@ -53,157 +55,316 @@
           "combinator": "and"
         },
         "options": {}
-      }
+      },
+      "id": "f14dd122-80ca-4299-8347-42d2753e0082",
+      "name": "Is Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -656,
+        160
+      ]
     },
     {
-      "id": "respond-400",
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"error\": \"Invalid payload\", \"details\": $json.errors } }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "db32a589-8682-4208-adad-786f1a5746c0",
       "name": "Respond 400 - Invalid",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [520, 160],
-      "parameters": {
-        "respondWith": "json",
-        "responseCode": 400,
-        "responseBody": "={{ { \"error\": \"Invalid payload\", \"details\": $json.errors } }}"
-      }
+      "position": [
+        -448,
+        320
+      ]
     },
     {
-      "id": "supabase-insert-lead",
-      "name": "Supabase - Insert Lead",
-      "type": "n8n-nodes-base.supabase",
-      "typeVersion": 1,
-      "position": [520, -100],
       "parameters": {
-        "operation": "create",
         "tableId": "leads",
-        "dataToSend": "defineBelow",
         "fieldsUi": {
           "fieldValues": [
-            { "fieldId": "name", "fieldValue": "={{ $json.name }}" },
-            { "fieldId": "email", "fieldValue": "={{ $json.email }}" },
-            { "fieldId": "company", "fieldValue": "={{ $json.company }}" },
-            { "fieldId": "domain", "fieldValue": "={{ $json.domain }}" },
-            { "fieldId": "source", "fieldValue": "={{ $json.source }}" },
-            { "fieldId": "message", "fieldValue": "={{ $json.message }}" },
-            { "fieldId": "submitted_at", "fieldValue": "={{ $json.submitted_at }}" }
-          ]
-        }
-      },
-      "credentials": {
-        "supabaseApi": {
-          "id": "PLACEHOLDER_SET_IN_N8N",
-          "name": "Supabase Leads"
-        }
-      }
-    },
-    {
-      "id": "hubspot-create-contact",
-      "name": "HubSpot - Create Contact",
-      "type": "n8n-nodes-base.hubspot",
-      "typeVersion": 2,
-      "position": [740, -100],
-      "onError": "continueErrorOutput",
-      "parameters": {
-        "resource": "contact",
-        "operation": "upsert",
-        "email": "={{ $('Supabase - Insert Lead').item.json.email }}",
-        "additionalFields": {
-          "firstname": "={{ $('Supabase - Insert Lead').item.json.name.split(' ')[0] }}",
-          "lastname": "={{ $('Supabase - Insert Lead').item.json.name.split(' ').slice(1).join(' ') || '' }}",
-          "company": "={{ $('Supabase - Insert Lead').item.json.company }}"
-        },
-        "customPropertiesUi": {
-          "customPropertiesValues": [
             {
-              "property": "lead_source",
-              "value": "={{ $('Supabase - Insert Lead').item.json.source }}"
+              "fieldId": "name",
+              "fieldValue": "={{ $json.name }}"
+            },
+            {
+              "fieldId": "email",
+              "fieldValue": "={{ $json.email }}"
+            },
+            {
+              "fieldId": "company",
+              "fieldValue": "={{ $json.company }}"
+            },
+            {
+              "fieldId": "domain",
+              "fieldValue": "={{ $json.domain }}"
+            },
+            {
+              "fieldId": "source",
+              "fieldValue": "={{ $json.source }}"
+            },
+            {
+              "fieldId": "message",
+              "fieldValue": "={{ $json.message }}"
+            },
+            {
+              "fieldId": "submitted_at",
+              "fieldValue": "={{ $json.submitted_at }}"
             }
           ]
         }
       },
-      "credentials": {
-        "hubspotAppToken": {
-          "id": "PLACEHOLDER_SET_IN_N8N",
-          "name": "HubSpot Service Key"
-        }
-      }
-    },
-    {
-      "id": "respond-200",
-      "name": "Respond 200 - OK",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "position": [960, -160],
-      "parameters": {
-        "respondWith": "json",
-        "responseCode": 200,
-        "responseBody": "={{ { \"status\": \"ok\", \"id\": $('Supabase - Insert Lead').item.json.id } }}"
-      }
-    },
-    {
-      "id": "supabase-mark-error",
-      "name": "Supabase - Mark Lead Error",
+      "id": "4f68b356-3996-4139-83b2-5362f02bead7",
+      "name": "Supabase - Insert Lead",
       "type": "n8n-nodes-base.supabase",
       "typeVersion": 1,
-      "position": [960, -20],
-      "parameters": {
-        "operation": "update",
-        "tableId": "leads",
-        "filterType": "manual",
-        "matchingColumns": ["id"],
-        "fieldsUi": {
-          "fieldValues": [
-            { "fieldId": "id", "fieldValue": "={{ $('Supabase - Insert Lead').item.json.id }}" },
-            { "fieldId": "status", "fieldValue": "error" }
-          ]
-        }
-      },
+      "position": [
+        -448,
+        64
+      ],
       "credentials": {
         "supabaseApi": {
-          "id": "PLACEHOLDER_SET_IN_N8N",
+          "id": "4pPsx2sAVgrzJm5n",
           "name": "Supabase Leads"
         }
       }
     },
     {
-      "id": "stop-and-error",
+      "parameters": {
+        "authentication": "appToken",
+        "email": "={{ $('Supabase - Insert Lead').item.json.email }}",
+        "additionalFields": {
+          "companyName": "={{ $('Supabase - Insert Lead').item.json.company }}",
+          "firstName": "={{ $('Supabase - Insert Lead').item.json.name.split(' ')[0] }}",
+          "lastName": "={{ $('Supabase - Insert Lead').item.json.name.split(' ').slice(1).join(' ') }}"
+        },
+        "options": {}
+      },
+      "id": "3a89c7c7-83c8-4025-aa25-3f363ef3ac96",
+      "name": "HubSpot - Create Contact",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [
+        -224,
+        64
+      ],
+      "credentials": {
+        "hubspotAppToken": {
+          "id": "9PrUwDyFRtzTJ544",
+          "name": "HubSpot Service Key"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"status\": \"ok\", \"id\": $('Supabase - Insert Lead').item.json.id } }}",
+        "options": {}
+      },
+      "id": "e96126ad-58f7-4a18-83d5-bca8ba2cd297",
+      "name": "Respond 200 - OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        208,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "leads",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Supabase - Insert Lead').item.json.id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "error"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "error"
+            }
+          ]
+        }
+      },
+      "id": "e0ade357-183d-4059-ac4e-99a5380a295e",
+      "name": "Supabase - Mark Lead Error",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        208,
+        144
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "4pPsx2sAVgrzJm5n",
+          "name": "Supabase Leads"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "errorMessage": "=HubSpot contact creation failed for lead {{ $('Supabase - Insert Lead').item.json.id }} ({{ $('Supabase - Insert Lead').item.json.email }}): {{ $json.error ? $json.error.toString() : JSON.stringify($json) }}. Lead marked status=error in Supabase, replayable after fix."
+      },
+      "id": "87f8ebd1-9b07-46d9-be4d-5d1a0bd88a28",
       "name": "Fail Execution - HubSpot Error",
       "type": "n8n-nodes-base.stopAndError",
       "typeVersion": 1,
-      "position": [1180, -20],
+      "position": [
+        432,
+        144
+      ]
+    },
+    {
       "parameters": {
-        "errorMessage": "=HubSpot contact creation failed for lead {{ $('Supabase - Insert Lead').item.json.id }} ({{ $('Supabase - Insert Lead').item.json.email }}): {{ $json.error ? $json.error.toString() : JSON.stringify($json) }}. Lead marked status=error in Supabase, replayable after fix."
+        "method": "PATCH",
+        "url": "=https://api.hubapi.com/crm/v3/objects/contacts/{{ $json.vid }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "hubspotAppToken",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"properties\": { \"lead_source\": $('Supabase - Insert Lead').item.json.source } } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -16,
+        0
+      ],
+      "id": "9acc980c-42a0-4a38-a7d4-cbc71d4231ab",
+      "name": "HubSpot - Set Lead Source",
+      "credentials": {
+        "hubspotAppToken": {
+          "id": "9PrUwDyFRtzTJ544",
+          "name": "HubSpot Service Key"
+        }
       }
     }
   ],
+  "pinData": {},
   "connections": {
     "Webhook - Lead Intake": {
-      "main": [[{ "node": "Validate Payload", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Validate Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Validate Payload": {
-      "main": [[{ "node": "Is Valid?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Is Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Is Valid?": {
       "main": [
-        [{ "node": "Supabase - Insert Lead", "type": "main", "index": 0 }],
-        [{ "node": "Respond 400 - Invalid", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Supabase - Insert Lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 400 - Invalid",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Supabase - Insert Lead": {
-      "main": [[{ "node": "HubSpot - Create Contact", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "HubSpot - Create Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "HubSpot - Create Contact": {
       "main": [
-        [{ "node": "Respond 200 - OK", "type": "main", "index": 0 }],
-        [{ "node": "Supabase - Mark Lead Error", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "HubSpot - Set Lead Source",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Supabase - Mark Lead Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Supabase - Mark Lead Error": {
-      "main": [[{ "node": "Fail Execution - HubSpot Error", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Fail Execution - HubSpot Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HubSpot - Set Lead Source": {
+      "main": [
+        [
+          {
+            "node": "Respond 200 - OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
+  "active": true,
   "settings": {
     "executionOrder": "v1",
-    "errorWorkflow": "SET_MANUALLY_TO_Lead_Intake_Error_Alert_AFTER_IMPORT"
-  }
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "Yl0d71QmNV63K9MI",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "4af6e80c-2407-4236-8137-d48d5951fd70",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "68dc6225d3bd91f509f1622e5bc9ca13d6bb79e6e162b7d2abe02d53fb814dcd"
+  },
+  "nodeGroups": [],
+  "id": "ql9dgCIrIKvVeukr",
+  "tags": []
 }

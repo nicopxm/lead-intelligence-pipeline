@@ -25,7 +25,7 @@ Full rationale: docs/ARCHITECTURE.md. Read it before structural work.
 - Work ONE GitHub issue at a time (single-piece flow). The issue's acceptance criteria are the spec. Reference the issue in commits; close with "Closes #N".
 - Board (GitHub Projects: Backlog → Sprint → In Progress → Done) is the single source of truth. Move the issue to In Progress when starting.
 - Mid-task ideas → create a Backlog issue via `gh issue create`, do NOT implement.
-- Definition of Done: merged to main, pushed to origin, deployed, verified end-to-end, errors alert, docs updated, issue closed. Never end an issue with unpushed commits.
+- Definition of Done: merged to main, pushed to origin, deployed, verified end-to-end, errors alert, docs updated, issue closed. Never end an issue with unpushed commits. If the issue touched n8n workflows, do a fresh export (n8n "..." menu → Download) of every affected workflow and diff it against what's committed in `n8n/workflows/` before closing — live in-editor fixes (credential wiring, node reconfiguration, drift from the originally-imported JSON) do not retroactively update the repo on their own.
 - Config-driven everything: ICP, credentials, client identity, thresholds. If you're about to hardcode a value that could differ per tenant, put it in config/env instead.
 - No silent failures: every workflow/route gets an error path that alerts. If you can't alert yet (early sprints), log loudly and leave a TODO issue.
 - Legal data sources only. No LinkedIn scraping, ever.
