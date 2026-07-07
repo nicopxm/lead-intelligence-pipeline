@@ -17,6 +17,7 @@ Operational reference: infra provisioning, restore-from-scratch, and day-2 proce
 - [x] HubSpot Service Key setup + contact verification (#4)
 - [x] Universal webhook intake workflow (#7)
 - [x] Vercel CI/CD connection (#5)
+- [x] Intake form (#6)
 - [ ] Restore-from-scratch procedure (full stack)
 
 ## Hetzner provisioning (#2)
@@ -139,6 +140,17 @@ Root `nicopxm.me` is reserved for a future personal portfolio site, not this pip
 2. Vercel shows a CNAME target for the subdomain (a root/apex domain would need an A record instead, but a subdomain always gets a CNAME). At setup time this was `cname.vercel-dns.com.` — always confirm against what the Domains page actually displays, since Vercel can issue a project- or region-specific target.
 3. Porkbun (nicopxm.me → DNS Records) → add: type `CNAME`, host `leads`, answer `cname.vercel-dns.com.` (or whatever Vercel showed), TTL 600 (default).
 4. Propagation was fast (a few minutes); Vercel auto-issues the TLS cert once the CNAME resolves and marks the domain "Valid". Verified live (2026-07-07): `https://leads.nicopxm.me` returns 200 with a valid cert and serves the app.
+
+## Intake form (#6)
+
+**Form**: `web/src/app/page.tsx` renders `web/src/components/LeadForm.tsx` (client component) at `/`. Fields: name, email, company, domain (optional), message.
+
+1. Shared validation lives in `web/src/lib/lead.ts` (`leadFormSchema`, a zod schema) — used both client-side (inline field errors, no round-trip needed for a bad email) and server-side (the API route re-validates; never trust the client alone).
+2. Domain derivation (`deriveDomain`): if the form's optional domain field is filled, use it. Otherwise take the part after `@` in the email — unless it's a free-mail provider (gmail, outlook, yahoo, icloud, etc. — see the `FREE_EMAIL_DOMAINS` set in `lead.ts`), in which case `domain` stays `null` rather than becoming e.g. `gmail.com`.
+3. Submission flow: form POSTs to `web/src/app/api/leads/route.ts` (a Next.js Route Handler, not directly to n8n) → that route re-validates with the same zod schema, builds the webhook payload (`source: "website_form"`, `timestamp: new Date().toISOString()`), and POSTs to `LEAD_INTAKE_WEBHOOK_URL`. Going through a server route rather than POSTing to n8n from the browser keeps the n8n webhook URL out of the client bundle and avoids a cross-origin request from `leads.nicopxm.me` to `n8n.nicopxm.me`.
+4. **New env var**: `LEAD_INTAKE_WEBHOOK_URL` = `https://n8n.nicopxm.me/webhook/lead-intake` (see `.env.example`). Server-side only — set in Vercel (Production + Preview) and in `web/.env.local` for local dev (gitignored, not committed). Without it the API route returns 500 rather than silently failing.
+5. Failure states preserve typed input: form state is React `useState`, never cleared except on confirmed success — a failed submit (validation error or webhook/network failure) leaves every field exactly as typed.
+6. Verified end-to-end on production (2026-07-07): submitted via a real browser session against `https://leads.nicopxm.me`, confirmed the row landed in Supabase (`status=raw`, correct domain derivation) and the HubSpot contact was created with `lead_source=website_form`; also verified a free-mail email (`@gmail.com`) leaves `domain` null, and an invalid email is rejected client-side without losing the other typed fields. Test leads/contacts deleted after verification.
 
 ## Restore-from-scratch
 1. Provision a new Hetzner VPS per "Hetzner provisioning" above (or restore from a Hetzner snapshot/backup if one exists — none configured yet, see backlog).
