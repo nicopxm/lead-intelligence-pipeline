@@ -131,6 +131,15 @@ Reusable gotchas hit while building the intake workflow (#7) — full debugging 
 5. Push to `main` → production deploy. Opening a PR → preview deploy + a Vercel bot comment on the PR with per-project preview URLs. Verified both directions live (2026-07-07): placeholder page reachable on the production URL and on a throwaway test-branch PR's preview URL.
 6. **Watch for duplicate Vercel projects on the same repo.** An earlier failed/misconfigured import attempt can leave a second Vercel project still wired to GitHub pushes/PRs alongside the working one — both then post separate status checks. Vercel Settings → Advanced → Delete Project removes the stray one; check the PR bot comment's project table if checks look duplicated.
 
+### Custom domain: leads.nicopxm.me
+
+Root `nicopxm.me` is reserved for a future personal portfolio site, not this pipeline — see docs/DECISIONS.md (2026-07-07, revises the 2026-07-02 domain decision). The pipeline lives at the subdomain `leads.nicopxm.me` instead.
+
+1. Vercel project (`lead-intelligence-pipeline-8uzs`) → Settings → **Domains** → add `leads.nicopxm.me`.
+2. Vercel shows a CNAME target for the subdomain (a root/apex domain would need an A record instead, but a subdomain always gets a CNAME). At setup time this was `cname.vercel-dns.com.` — always confirm against what the Domains page actually displays, since Vercel can issue a project- or region-specific target.
+3. Porkbun (nicopxm.me → DNS Records) → add: type `CNAME`, host `leads`, answer `cname.vercel-dns.com.` (or whatever Vercel showed), TTL 600 (default).
+4. Propagation was fast (a few minutes); Vercel auto-issues the TLS cert once the CNAME resolves and marks the domain "Valid". Verified live (2026-07-07): `https://leads.nicopxm.me` returns 200 with a valid cert and serves the app.
+
 ## Restore-from-scratch
 1. Provision a new Hetzner VPS per "Hetzner provisioning" above (or restore from a Hetzner snapshot/backup if one exists — none configured yet, see backlog).
 2. Harden per the steps above (non-root user, ufw, fail2ban, disable password/root SSH).
