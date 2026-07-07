@@ -47,9 +47,9 @@ Full rationale: docs/ARCHITECTURE.md. Read it before structural work.
 
 ## Current status
 Sprint 1 — Goal: form submission lands in Supabase and HubSpot raw.
-Done: #1 (scaffolding), #2 (Hetzner + Docker + n8n), #3 (Supabase project + leads schema migration), #4 (HubSpot Service Key + contact verification — used a Service Key instead of the legacy private app named in the issue, see docs/DECISIONS.md), #7 (universal webhook intake — verified end-to-end incl. a forced-failure test of the dead-letter/alert path; several real n8n/Caddy bugs found and fixed along the way, see docs/DECISIONS.md and docs/RUNBOOK.md).
+Done: #1 (scaffolding), #2 (Hetzner + Docker + n8n), #3 (Supabase project + leads schema migration), #4 (HubSpot Service Key + contact verification — used a Service Key instead of the legacy private app named in the issue, see docs/DECISIONS.md), #7 (universal webhook intake — verified end-to-end incl. a forced-failure test of the dead-letter/alert path; several real n8n/Caddy bugs found and fixed along the way, see docs/DECISIONS.md and docs/RUNBOOK.md), #5 (Next.js TypeScript app scaffolded in web/, Vercel CI/CD connected — Root Directory=web and Framework Preset=Next.js both had to be set explicitly or every route 404'd; verified production deploy and PR preview deploy live, see docs/RUNBOOK.md).
 Backlog (not scheduled): #15 (replace Caddy basic auth with session-based access — spun out of #7, not blocking anything).
-Now on: whatever Wop assigns next (likely #6 intake form or #5 Vercel CI/CD to continue Sprint 1).
+Now on: whatever Wop assigns next (likely #6 intake form to continue Sprint 1).
 [UPDATE THIS EVERY SESSION]
 
 ## Don't do this

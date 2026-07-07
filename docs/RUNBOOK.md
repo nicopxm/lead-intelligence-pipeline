@@ -16,7 +16,7 @@ Operational reference: infra provisioning, restore-from-scratch, and day-2 proce
 - [x] Supabase project setup + migration workflow (#3)
 - [x] HubSpot Service Key setup + contact verification (#4)
 - [x] Universal webhook intake workflow (#7)
-- [ ] Vercel CI/CD connection (#5)
+- [x] Vercel CI/CD connection (#5)
 - [ ] Restore-from-scratch procedure (full stack)
 
 ## Hetzner provisioning (#2)
@@ -119,6 +119,17 @@ Reusable gotchas hit while building the intake workflow (#7) — full debugging 
    - Supabase insert failure → node throws, execution fails → `Lead Intake - Error Alert` fires automatically (n8n's Error Workflow mechanism) → Resend email to Wop.
    - HubSpot failure (after Supabase insert succeeded) → the lead row is updated to `status=error` (dead-letter, per docs/ARCHITECTURE.md #8, replayable after fix) before the execution is deliberately failed (Stop and Error node) → same alert path fires. Verified live end-to-end (2026-07-07): forced a HubSpot failure, confirmed the lead row flipped to `status=error`, the execution showed failed in n8n, and the Resend alert email arrived with the lead id/email/execution link.
 10. Manual verification: `curl -X POST https://<N8N_HOST>/webhook/lead-intake -H 'Content-Type: application/json' -d '{"name":"Test Lead","email":"test@example.com","company":"Acme","domain":"acme.com","source":"curl-test","message":"hi","timestamp":"2026-07-07T12:00:00Z"}'` returns 200 + `{"status":"ok","id":...}`, creates a Supabase row and a HubSpot contact with `firstname`/`lastname`/`company`/`lead_source` populated. A payload missing `email` returns 400 and shows up in n8n's Executions list as a completed (not silently dropped) run.
+
+## Vercel CI/CD connection (#5)
+
+**App**: Next.js (TypeScript) app scaffolded in `web/` — a subdirectory, not repo root, since the repo also holds `n8n/`, `supabase/`, `docs/`, etc.
+
+1. Connect the Vercel account to GitHub and import `nicopxm/lead-intelligence-pipeline`.
+2. **Root Directory must be set to `web`** (Settings → General → Root Directory) — without it, Vercel tries to build from repo root and finds no Next.js app, producing a `NOT_FOUND` on every route despite a "successful"-looking deploy.
+3. **Framework Preset must be explicitly `Next.js`**, not `Other`. Setting Root Directory after initial project creation can leave the preset on `Other` (looking for a static `public`/`.` output instead of running the Next.js build/routing), which also serves `NOT_FOUND` even though the build log shows a clean `next build`. If this happens: fix the preset in Settings, then redeploy (build-cache-skipped) — changing the setting alone doesn't retroactively fix the current production deployment.
+4. Env vars (Settings → Environment Variables), scoped to **Production + Preview** (not Development — local dev reads `.env` directly per this repo's convention): `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`. HubSpot/Resend keys are **not** added here — only n8n talks to those services; the Next.js app never does.
+5. Push to `main` → production deploy. Opening a PR → preview deploy + a Vercel bot comment on the PR with per-project preview URLs. Verified both directions live (2026-07-07): placeholder page reachable on the production URL and on a throwaway test-branch PR's preview URL.
+6. **Watch for duplicate Vercel projects on the same repo.** An earlier failed/misconfigured import attempt can leave a second Vercel project still wired to GitHub pushes/PRs alongside the working one — both then post separate status checks. Vercel Settings → Advanced → Delete Project removes the stray one; check the PR bot comment's project table if checks look duplicated.
 
 ## Restore-from-scratch
 1. Provision a new Hetzner VPS per "Hetzner provisioning" above (or restore from a Hetzner snapshot/backup if one exists — none configured yet, see backlog).
