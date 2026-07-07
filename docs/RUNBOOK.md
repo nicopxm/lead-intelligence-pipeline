@@ -89,6 +89,15 @@ docker compose up -d
 6. Custom contact properties created via `POST https://api.hubapi.com/crm/v3/properties/contacts`: `lead_source` (string/text), `icp_score` (number) — the latter unused until Sprint 4 scoring lands.
 7. Verified auth end-to-end: created a test contact via `POST /crm/v3/objects/contacts`, confirmed `lead_source` round-tripped correctly, then deleted it via `DELETE /crm/v3/objects/contacts/{id}` (204). Both properties and the Service Key confirmed working.
 
+## n8n operational notes
+
+Reusable gotchas hit while building the intake workflow (#7) — full debugging trail in that issue's closing comment, this is just the distilled checklist for next time:
+
+- **Webhook body is nested.** The Webhook node's output is `{ headers, params, query, body }` — read `$json.body.fieldName`, not `$json.fieldName`.
+- **Resource-locator fields don't survive a from-scratch JSON import.** Supabase's table/field/filter pickers and similar dropdown-driven params come back empty/invalid after Import from File, even when the exported JSON had values — reselect them in the editor after every fresh import.
+- **Publish ≠ Active.** Newer n8n has a separate draft/published state per workflow. A workflow must be Published before it can be chosen as another workflow's Error Workflow, and edits to a published workflow don't take effect until you Publish again.
+- **Single-file bind mounts pin to inode, not path.** Overwriting a bind-mounted file with `mv` leaves the running container serving the old content (even `caddy reload`/`validate` inside it looks correct against the stale copy). After replacing `n8n/Caddyfile` or similar, redeploy with `docker compose up -d --force-recreate <service>`, don't just `mv` + reload.
+
 ## Universal webhook intake workflow (#7)
 
 **Workflows**: exported live from n8n after full setup + verification to `n8n/workflows/lead-intake.json` and `n8n/workflows/lead-intake-error-alert.json` (n8n "..." menu → Download). These reflect the actual working config, not the original hand-authored JSON — n8n's Supabase/HubSpot/Respond-to-Webhook node parameter shapes drifted from what was originally written, so re-importing from scratch will need the same manual node fixes below re-applied; always fix in the live editor then re-export, don't hand-edit the JSON.
