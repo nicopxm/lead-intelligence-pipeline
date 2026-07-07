@@ -17,3 +17,4 @@ Open [http://localhost:3000](http://localhost:3000).
 - `npm run build` — production build
 - `npm run lint` — ESLint
 - `npm run typecheck` — TypeScript, no emit
+<!-- preview check -->
