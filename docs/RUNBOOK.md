@@ -18,6 +18,7 @@ Operational reference: infra provisioning, restore-from-scratch, and day-2 proce
 - [x] Universal webhook intake workflow (#7)
 - [x] Vercel CI/CD connection (#5)
 - [x] Intake form (#6)
+- [x] Demo-ready form styling (#17)
 - [ ] Restore-from-scratch procedure (full stack)
 
 ## Hetzner provisioning (#2)
@@ -151,6 +152,7 @@ Root `nicopxm.me` is reserved for a future personal portfolio site, not this pip
 4. **New env var**: `LEAD_INTAKE_WEBHOOK_URL` = `https://n8n.nicopxm.me/webhook/lead-intake` (see `.env.example`). Server-side only — set in Vercel (Production + Preview) and in `web/.env.local` for local dev (gitignored, not committed). Without it the API route returns 500 rather than silently failing.
 5. Failure states preserve typed input: form state is React `useState`, never cleared except on confirmed success — a failed submit (validation error or webhook/network failure) leaves every field exactly as typed.
 6. Verified end-to-end on production (2026-07-07): submitted via a real browser session against `https://leads.nicopxm.me`, confirmed the row landed in Supabase (`status=raw`, correct domain derivation) and the HubSpot contact was created with `lead_source=website_form`; also verified a free-mail email (`@gmail.com`) leaves `domain` null, and an invalid email is rejected client-side without losing the other typed fields. Test leads/contacts deleted after verification.
+7. **Styling (#17)**: `LeadForm.module.css` + CSS custom properties in `globals.css` (`--accent`, `--border`, `--success-bg`/`--error-fg`, etc., each with a `prefers-color-scheme: dark` variant). No new dependencies — scaffold was created with `--no-tailwind`, so this is hand-written CSS Modules, not a design-system library. Covers: labeled inputs with `:focus-visible` states, a loading spinner on submit, styled success/error message boxes, one accent color used consistently, and a mobile breakpoint. Verified with real browser screenshots (desktop + 375px mobile viewport) both locally and against production `leads.nicopxm.me`. Explicitly out of scope: branding/animations/redesign, tracked in backlog issue #18.
 
 ## Restore-from-scratch
 1. Provision a new Hetzner VPS per "Hetzner provisioning" above (or restore from a Hetzner snapshot/backup if one exists — none configured yet, see backlog).
