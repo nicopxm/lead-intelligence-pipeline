@@ -1,0 +1,241 @@
+{
+  "name": "Website Scraper",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "fa9c779f-c039-45d3-b94e-7a2f41086d08",
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [-1760, 0]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "tableId": "leads",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        }
+      },
+      "id": "1b185601-0cb8-43b6-a194-1f920e886c78",
+      "name": "Supabase - Get Lead",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [-1536, 0],
+      "credentials": {
+        "supabaseApi": {
+          "id": "4pPsx2sAVgrzJm5n",
+          "name": "Supabase Leads"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $json;\nreturn [{\n  json: {\n    ...row,\n    hasDomain: !!(row.domain && row.domain.trim())\n  }\n}];"
+      },
+      "id": "6972cbf0-6421-4997-ac45-9c4ccefb6024",
+      "name": "Check Domain",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1312, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-has-domain",
+              "leftValue": "={{ $json.hasDomain }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f26466e1-f1d1-4a71-a177-a186d834f13a",
+      "name": "Has Domain?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-1088, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $('Check Domain').item.json;\nconst existing = row.enrichment || {};\nconst skippedPage = { status: 'skipped', text: '', url: null, reason: 'no_domain' };\n\nconst enrichment = {\n  ...existing,\n  website: {\n    status: 'skipped',\n    pages: {\n      home: skippedPage,\n      about: skippedPage,\n      pricing: skippedPage\n    },\n    fetched_at: null\n  }\n};\n\nreturn [{ json: { id: row.id, enrichment } }];"
+      },
+      "id": "8d7768bb-69f6-4095-bcf5-ee10fc3fa50a",
+      "name": "Build Skipped Website (no domain)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-864, 160]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://{{ $('Check Domain').item.json.domain.trim() }}/robots.txt",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 5000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "b5c32882-3a61-452f-b464-2f7ced334f94",
+      "name": "Fetch robots.txt",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [-864, -160],
+      "retryOnFail": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Absent, unreachable, or unparseable robots.txt is treated as permissive\n// (absent = allowed) so this can never itself break enrichment (see docs/DECISIONS.md).\nconst resp = $json;\nconst disallowed = [];\n\nif (resp.statusCode && resp.statusCode < 400 && typeof resp.body === 'string') {\n  let inWildcardBlock = false;\n  for (const raw of resp.body.split(/\\r?\\n/)) {\n    const line = raw.split('#')[0].trim();\n    if (!line) continue;\n    const sepIdx = line.indexOf(':');\n    if (sepIdx === -1) continue;\n    const key = line.slice(0, sepIdx).trim().toLowerCase();\n    const value = line.slice(sepIdx + 1).trim();\n    if (key === 'user-agent') {\n      inWildcardBlock = value === '*';\n    } else if (key === 'disallow' && inWildcardBlock && value) {\n      disallowed.push(value);\n    }\n  }\n}\n\nconst row = $('Check Domain').item.json;\nreturn [{\n  json: {\n    id: row.id,\n    domain: row.domain.trim(),\n    enrichment: row.enrichment || {},\n    disallowedPrefixes: disallowed\n  }\n}];"
+      },
+      "id": "1654697f-31f5-4f31-8d19-ae7dfe265f2e",
+      "name": "Parse robots.txt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-640, -160]
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $json;\nconst base = `https://${row.domain}`;\nconst disallowed = row.disallowedPrefixes || [];\n\nfunction isAllowed(path) {\n  return !disallowed.some((prefix) => path.startsWith(prefix));\n}\n\nconst plan = [\n  { pageType: 'home', primaryPath: '/', fallbackPath: null },\n  { pageType: 'about', primaryPath: '/about', fallbackPath: '/about-us' },\n  { pageType: 'pricing', primaryPath: '/pricing', fallbackPath: '/plans' }\n];\n\nreturn plan.map((p) => ({\n  json: {\n    pageType: p.pageType,\n    primaryUrl: base + p.primaryPath,\n    primaryAllowed: isAllowed(p.primaryPath),\n    fallbackUrl: p.fallbackPath ? base + p.fallbackPath : null,\n    fallbackAllowed: p.fallbackPath ? isAllowed(p.fallbackPath) : false\n  }\n}));"
+      },
+      "id": "e4b446d8-638d-47c7-856b-39f229d180cf",
+      "name": "Build Page Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-416, -160]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "Website Scraper - Fetch Page"
+        },
+        "mode": "each",
+        "options": {}
+      },
+      "id": "32b5428e-c3e2-401c-a0ae-31b946560a6a",
+      "name": "Execute Workflow - Fetch Page",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [-192, -160]
+    },
+    {
+      "parameters": {
+        "jsCode": "const pageResults = $input.all().map((i) => i.json);\nconst pages = {};\nfor (const r of pageResults) {\n  pages[r.pageType] = {\n    status: r.status,\n    text: r.text || '',\n    url: r.url || null,\n    ...(r.reason ? { reason: r.reason } : {})\n  };\n}\n\nconst statuses = Object.values(pages).map((p) => p.status);\nconst okCount = statuses.filter((s) => s === 'ok').length;\nlet websiteStatus;\nif (okCount === statuses.length) websiteStatus = 'ok';\nelse if (okCount === 0) websiteStatus = 'failed';\nelse websiteStatus = 'partial';\n\nconst row = $('Parse robots.txt').first().json;\nconst existing = row.enrichment || {};\n\nconst enrichment = {\n  ...existing,\n  website: {\n    status: websiteStatus,\n    pages,\n    fetched_at: new Date().toISOString()\n  }\n};\n\nreturn [{ json: { id: row.id, enrichment } }];"
+      },
+      "id": "0a6de24d-7ae3-4f77-b2f1-890c65aaca9d",
+      "name": "Aggregate Website Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [32, -160]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "leads",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "enrichment",
+              "fieldValue": "={{ $json.enrichment }}"
+            }
+          ]
+        }
+      },
+      "id": "76e6ffdb-2068-4df7-87fe-7569dd73ead8",
+      "name": "Supabase - Update Enrichment",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [256, 0],
+      "credentials": {
+        "supabaseApi": {
+          "id": "4pPsx2sAVgrzJm5n",
+          "name": "Supabase Leads"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [[{ "node": "Supabase - Get Lead", "type": "main", "index": 0 }]]
+    },
+    "Supabase - Get Lead": {
+      "main": [[{ "node": "Check Domain", "type": "main", "index": 0 }]]
+    },
+    "Check Domain": {
+      "main": [[{ "node": "Has Domain?", "type": "main", "index": 0 }]]
+    },
+    "Has Domain?": {
+      "main": [
+        [{ "node": "Fetch robots.txt", "type": "main", "index": 0 }],
+        [{ "node": "Build Skipped Website (no domain)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Skipped Website (no domain)": {
+      "main": [[{ "node": "Supabase - Update Enrichment", "type": "main", "index": 0 }]]
+    },
+    "Fetch robots.txt": {
+      "main": [[{ "node": "Parse robots.txt", "type": "main", "index": 0 }]]
+    },
+    "Parse robots.txt": {
+      "main": [[{ "node": "Build Page Plan", "type": "main", "index": 0 }]]
+    },
+    "Build Page Plan": {
+      "main": [[{ "node": "Execute Workflow - Fetch Page", "type": "main", "index": 0 }]]
+    },
+    "Execute Workflow - Fetch Page": {
+      "main": [[{ "node": "Aggregate Website Status", "type": "main", "index": 0 }]]
+    },
+    "Aggregate Website Status": {
+      "main": [[{ "node": "Supabase - Update Enrichment", "type": "main", "index": 0 }]]
+    }
+  }
+}

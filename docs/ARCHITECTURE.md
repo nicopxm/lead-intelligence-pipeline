@@ -89,9 +89,9 @@ The `leads.enrichment` JSONB column (see #7's migration) holds one object per le
   "website": {
     "status": "ok | partial | failed | skipped",
     "pages": {
-      "home":    { "status": "ok | partial | failed", "text": "...", "url": "..." },
-      "about":   { "status": "ok | partial | failed", "text": "...", "url": "..." },
-      "pricing": { "status": "ok | partial | failed", "text": "...", "url": "..." }
+      "home":    { "status": "ok | failed | skipped", "text": "...", "url": "...", "reason": "fetch_failed | robots_disallowed | empty_content" },
+      "about":   { "status": "ok | failed | skipped", "text": "...", "url": "...", "reason": "fetch_failed | robots_disallowed | empty_content" },
+      "pricing": { "status": "ok | failed | skipped", "text": "...", "url": "...", "reason": "fetch_failed | robots_disallowed | empty_content" }
     },
     "fetched_at": "2026-07-13T12:00:00Z"
   },
@@ -113,6 +113,12 @@ Status meanings (consistent across all three steps):
 - `partial` — step ran but some sub-parts failed (e.g. one of three pages, or a fingerprint match with low confidence)
 - `failed` — step ran and returned nothing usable
 - `skipped` — step never ran (e.g. `website`/`tech_stack` skipped when `domain` is null; the intelligence prompt is written to handle sparse/skipped input honestly, per decision #7)
+
+Per-page status (added by issue #20, `website.pages.*` only) uses a narrower enum than the step-level status above — `ok | failed | skipped`, no `partial` (partial only describes the aggregate across pages). A `reason` field is present whenever a page's status isn't `ok`:
+- `fetch_failed` — request errored, timed out, or returned a non-2xx status after the retry
+- `robots_disallowed` — the page's path is disallowed by the domain's `robots.txt` for our User-Agent, so it was never fetched (page status is `skipped`, not `failed` — no error occurred, we chose not to fetch)
+- `empty_content` — the request succeeded but the stripped text was empty/below a minimal-content threshold (the JS-only SPA case: markup fetched fine, nothing renders without a browser)
+- `no_domain` — the lead has no domain, so no page was ever attempted (only appears when `website.status=skipped`)
 
 `leads.enriched_at` (added in this issue's migration) is set once orchestration finishes writing this object, regardless of how many sub-steps came back partial/failed/skipped — it marks "enrichment ran," not "enrichment fully succeeded."
 

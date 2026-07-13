@@ -1,0 +1,226 @@
+{
+  "name": "Website Scraper - Fetch Page",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "ffa69008-01af-4d31-8bc8-7a53dbb585fe",
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [-1600, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Input: { pageType, primaryUrl, primaryAllowed, fallbackUrl, fallbackAllowed }\n// Collapses the allowed/present checks into an ordered attempt list so the\n// rest of the workflow is a single linear try-1-then-try-2 chain.\nconst item = $input.item.json;\nconst attempts = [];\nif (item.primaryAllowed && item.primaryUrl) attempts.push(item.primaryUrl);\nif (item.fallbackAllowed && item.fallbackUrl) attempts.push(item.fallbackUrl);\n\nreturn [{\n  json: {\n    pageType: item.pageType,\n    attempt1Url: attempts[0] || null,\n    attempt2Url: attempts[1] || null\n  }\n}];"
+      },
+      "id": "1e8f9261-2fbf-42f1-977f-059375ce807a",
+      "name": "Prepare",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1376, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-has-attempt1",
+              "leftValue": "={{ $json.attempt1Url }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "82eaac62-3b2c-4c3e-8da8-df94feee6cb8",
+      "name": "Has Attempt 1?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-1152, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const prep = $('Prepare').item.json;\nreturn [{\n  json: {\n    pageType: prep.pageType,\n    status: 'skipped',\n    text: '',\n    url: null,\n    reason: 'robots_disallowed'\n  }\n}];"
+      },
+      "id": "8a88f023-07e3-45e4-9cb5-763283b94fb3",
+      "name": "Build Skipped (robots_disallowed)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-928, 160]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.attempt1Url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": false
+            }
+          }
+        }
+      },
+      "id": "b9d73059-f89c-408a-a83a-5597802b484f",
+      "name": "Fetch Attempt 1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [-928, -80],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const html = ($json.body || '').toString();\nconst url = $('Prepare').item.json.attempt1Url;\nconst CHAR_CAP = 4000;\nconst MIN_CONTENT_CHARS = 40;\n\nconst text = html\n  .replace(/<script[\\s\\S]*?<\\/script>/gi, ' ')\n  .replace(/<style[\\s\\S]*?<\\/style>/gi, ' ')\n  .replace(/<nav[\\s\\S]*?<\\/nav>/gi, ' ')\n  .replace(/<[^>]+>/g, ' ')\n  .replace(/&nbsp;/gi, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim()\n  .slice(0, CHAR_CAP);\n\nconst status = text.length >= MIN_CONTENT_CHARS ? 'ok' : 'failed';\n\nreturn [{\n  json: {\n    pageType: $('Prepare').item.json.pageType,\n    status,\n    text: status === 'ok' ? text : '',\n    url,\n    ...(status === 'failed' ? { reason: 'empty_content' } : {})\n  }\n}];"
+      },
+      "id": "81d13d3b-6b25-4f5b-b2e4-a2456e78768a",
+      "name": "Extract Text (Attempt 1)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-704, -160]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-has-attempt2",
+              "leftValue": "={{ $('Prepare').item.json.attempt2Url }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e21cbaab-038d-4428-a6ea-d6f247b75ab5",
+      "name": "Has Attempt 2?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-704, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const prep = $('Prepare').item.json;\nreturn [{\n  json: {\n    pageType: prep.pageType,\n    status: 'failed',\n    text: '',\n    url: null,\n    reason: 'fetch_failed'\n  }\n}];"
+      },
+      "id": "23d3d0e6-fd92-4f83-b250-4fb56827697b",
+      "name": "Build Failed (fetch_failed)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-480, 80]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Prepare').item.json.attempt2Url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": false
+            }
+          }
+        }
+      },
+      "id": "bc5ff1cb-98ce-40c4-9a78-688c885f7286",
+      "name": "Fetch Attempt 2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [-480, -160],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const html = ($json.body || '').toString();\nconst url = $('Prepare').item.json.attempt2Url;\nconst CHAR_CAP = 4000;\nconst MIN_CONTENT_CHARS = 40;\n\nconst text = html\n  .replace(/<script[\\s\\S]*?<\\/script>/gi, ' ')\n  .replace(/<style[\\s\\S]*?<\\/style>/gi, ' ')\n  .replace(/<nav[\\s\\S]*?<\\/nav>/gi, ' ')\n  .replace(/<[^>]+>/g, ' ')\n  .replace(/&nbsp;/gi, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim()\n  .slice(0, CHAR_CAP);\n\nconst status = text.length >= MIN_CONTENT_CHARS ? 'ok' : 'failed';\n\nreturn [{\n  json: {\n    pageType: $('Prepare').item.json.pageType,\n    status,\n    text: status === 'ok' ? text : '',\n    url,\n    ...(status === 'failed' ? { reason: 'empty_content' } : {})\n  }\n}];"
+      },
+      "id": "e9b74cd4-f819-4452-9342-9755b878db0e",
+      "name": "Extract Text (Attempt 2)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-256, -240]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [[{ "node": "Prepare", "type": "main", "index": 0 }]]
+    },
+    "Prepare": {
+      "main": [[{ "node": "Has Attempt 1?", "type": "main", "index": 0 }]]
+    },
+    "Has Attempt 1?": {
+      "main": [
+        [{ "node": "Fetch Attempt 1", "type": "main", "index": 0 }],
+        [{ "node": "Build Skipped (robots_disallowed)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch Attempt 1": {
+      "main": [
+        [{ "node": "Extract Text (Attempt 1)", "type": "main", "index": 0 }],
+        [{ "node": "Has Attempt 2?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Has Attempt 2?": {
+      "main": [
+        [{ "node": "Fetch Attempt 2", "type": "main", "index": 0 }],
+        [{ "node": "Build Failed (fetch_failed)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch Attempt 2": {
+      "main": [
+        [{ "node": "Extract Text (Attempt 2)", "type": "main", "index": 0 }],
+        [{ "node": "Build Failed (fetch_failed)", "type": "main", "index": 0 }]
+      ]
+    }
+  }
+}
