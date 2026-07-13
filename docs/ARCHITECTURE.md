@@ -80,6 +80,42 @@ New lead → enriched → scored against a configurable ICP → personalized dra
 ### 9. Paid enrichment (Clearbit/Apollo) is swap-in-able, not built-in
 **Why:** free scraping proves the architecture at $0 marginal cost; paid enrichment is a Phase 2 per-client business decision. The enrichment record schema is provider-agnostic, so swapping the scraper node for an Apollo node changes nothing downstream.
 
+## Enrichment record contract
+
+The `leads.enrichment` JSONB column (see #7's migration) holds one object per lead with three top-level keys, one per enrichment step. Each step reports its own `status` so a partial failure in one step never blocks the others or the pipeline (see decision #7 above).
+
+```json
+{
+  "website": {
+    "status": "ok | partial | failed | skipped",
+    "pages": {
+      "home":    { "status": "ok | partial | failed", "text": "...", "url": "..." },
+      "about":   { "status": "ok | partial | failed", "text": "...", "url": "..." },
+      "pricing": { "status": "ok | partial | failed", "text": "...", "url": "..." }
+    },
+    "fetched_at": "2026-07-13T12:00:00Z"
+  },
+  "tech_stack": {
+    "status": "ok | partial | failed | skipped",
+    "detected": ["..."],
+    "method": "html_fingerprinting"
+  },
+  "news": {
+    "status": "ok | partial | failed | skipped",
+    "items": [{ "title": "...", "url": "...", "published_at": "..." }],
+    "fetched_at": "2026-07-13T12:00:00Z"
+  }
+}
+```
+
+Status meanings (consistent across all three steps):
+- `ok` — step ran and returned usable data
+- `partial` — step ran but some sub-parts failed (e.g. one of three pages, or a fingerprint match with low confidence)
+- `failed` — step ran and returned nothing usable
+- `skipped` — step never ran (e.g. `website`/`tech_stack` skipped when `domain` is null; the intelligence prompt is written to handle sparse/skipped input honestly, per decision #7)
+
+`leads.enriched_at` (added in this issue's migration) is set once orchestration finishes writing this object, regardless of how many sub-steps came back partial/failed/skipped — it marks "enrichment ran," not "enrichment fully succeeded."
+
 ## Latency budget (<90s form-to-CRM)
 
 | Stage | Budget |
