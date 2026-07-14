@@ -10,6 +10,7 @@ services:
       - GENERIC_TIMEZONE=${GENERIC_TIMEZONE:-UTC}
     volumes:
       - n8n_data:/home/node/.n8n
+      - ${CONFIG_DIR}:/config:ro
     networks:
       - internal
 

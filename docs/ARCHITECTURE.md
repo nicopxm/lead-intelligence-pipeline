@@ -93,12 +93,18 @@ The `leads.enrichment` JSONB column (see #7's migration) holds one object per le
       "about":   { "status": "ok | failed | skipped", "text": "...", "url": "...", "reason": "fetch_failed | robots_disallowed | empty_content" },
       "pricing": { "status": "ok | failed | skipped", "text": "...", "url": "...", "reason": "fetch_failed | robots_disallowed | empty_content" }
     },
+    "raw_artifacts": {
+      "home":    { "script_hosts": ["..."], "link_hosts": ["..."], "meta_generator": "...", "header_names": ["..."], "script_path_markers": ["..."] },
+      "about":   { "script_hosts": ["..."], "link_hosts": ["..."], "meta_generator": "...", "header_names": ["..."], "script_path_markers": ["..."] },
+      "pricing": { "script_hosts": ["..."], "link_hosts": ["..."], "meta_generator": "...", "header_names": ["..."], "script_path_markers": ["..."] }
+    },
     "fetched_at": "2026-07-13T12:00:00Z"
   },
   "tech_stack": {
-    "status": "ok | partial | failed | skipped",
+    "status": "ok | failed | skipped",
     "detected": ["..."],
-    "method": "html_fingerprinting"
+    "method": "fingerprint",
+    "reason": "no_html | config_unreadable"
   },
   "news": {
     "status": "ok | partial | failed | skipped",
@@ -119,6 +125,14 @@ Per-page status (added by issue #20, `website.pages.*` only) uses a narrower enu
 - `robots_disallowed` — the page's path is disallowed by the domain's `robots.txt` for our User-Agent, so it was never fetched (page status is `skipped`, not `failed` — no error occurred, we chose not to fetch)
 - `empty_content` — the request succeeded but the stripped text was empty/below a minimal-content threshold (the JS-only SPA case: markup fetched fine, nothing renders without a browser)
 - `no_domain` — the lead has no domain, so no page was ever attempted (only appears when `website.status=skipped`)
+
+`website.raw_artifacts` (added by issue #21, amending #20's original shape — see docs/DECISIONS.md) captures a small, structured slice of each page's raw HTML *before* it's stripped down to `pages.*.text` — `script_hosts`/`link_hosts` are hostnames only (not full URLs, not full paths), `meta_generator` is the `<meta name="generator">` content if present (else `null`), `header_names` are the HTTP response header *names* only (not values, to stay minimal). This exists solely to feed #21's tech-stack fingerprinting without re-fetching pages; it is not shown to the intelligence prompt or dashboard. A page with no successful fetch (any `pages.*.status` other than `ok`/`failed`-with-`empty_content` — i.e. `robots_disallowed`, `no_domain`, or `fetch_failed`) has no HTTP response body to extract from, so its `raw_artifacts` entry is present but empty (`{ "script_hosts": [], "link_hosts": [], "meta_generator": null, "header_names": [], "script_path_markers": [] }`).
+
+`script_path_markers` is a narrow exception to "hosts only": some tools (Next.js, WordPress, CDN-loaded React) have no reliable third-party host to fingerprint against — Next.js/WordPress serve their own JS from the site's own domain, and React loaded via a general-purpose CDN (unpkg, jsDelivr) shares that host with thousands of unrelated packages. Rather than storing every script's full path (which would balloon artifact size and edge back toward "store all the markup"), scrape time checks each script `src` in full (host + path, not just the extracted hostname) against a small fixed allowlist of known substrings (`/_next/static/`, `/wp-content/`, `/wp-includes/`, `unpkg.com/react`, `jsdelivr.net/npm/react`) and records only which of those markers were seen. This allowlist lives in the #20 scraper's own code (not `config/tech_fingerprints.json`) since it's about *what to look for* in the markup, not the tool-name mapping — extending it requires a #20 code change and re-export, unlike the fully config-driven `script_host`/`link_host`/`meta_generator`/`header_name` fingerprint rules in #21's config.
+
+`tech_stack`'s per-step `reason` (added by issue #21) is present whenever status isn't `ok`:
+- `no_html` — `website.raw_artifacts` had no usable pages to fingerprint against (website step failed or was skipped entirely) — not an error, a graceful skip
+- `config_unreadable` — `config/tech_fingerprints.json` could not be read at execution time (bind mount missing, file malformed, etc.) — this **is** an operational failure and fires the error-alert path (unlike every other `skipped`/`failed` reason in this contract, which are expected, graceful outcomes)
 
 `leads.enriched_at` (added in this issue's migration) is set once orchestration finishes writing this object, regardless of how many sub-steps came back partial/failed/skipped — it marks "enrichment ran," not "enrichment fully succeeded."
 

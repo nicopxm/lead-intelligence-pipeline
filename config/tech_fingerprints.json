@@ -1,0 +1,56 @@
+[
+  { "tool": "HubSpot", "type": "script_host", "pattern": "hs-scripts.com" },
+  { "tool": "HubSpot", "type": "script_host", "pattern": "hsforms.net" },
+  { "tool": "HubSpot", "type": "script_host", "pattern": "hs-analytics.net" },
+  { "tool": "HubSpot", "type": "script_host", "pattern": "hscta.net" },
+
+  { "tool": "Salesforce/Pardot", "type": "script_host", "pattern": "pardot.com" },
+  { "tool": "Salesforce/Pardot", "type": "link_host", "pattern": "pardot.com" },
+
+  { "tool": "Marketo", "type": "script_host", "pattern": "marketo.net" },
+  { "tool": "Marketo", "type": "script_host", "pattern": "marketo.com" },
+
+  { "tool": "Intercom", "type": "script_host", "pattern": "widget.intercom.io" },
+  { "tool": "Intercom", "type": "script_host", "pattern": "intercomcdn.com" },
+
+  { "tool": "Drift", "type": "script_host", "pattern": "js.driftt.com" },
+
+  { "tool": "Crisp", "type": "script_host", "pattern": "client.crisp.chat" },
+
+  { "tool": "Google Analytics", "type": "script_host", "pattern": "google-analytics.com" },
+  { "tool": "Google Analytics", "type": "script_host", "pattern": "analytics.google.com" },
+
+  { "tool": "Google Tag Manager", "type": "script_host", "pattern": "googletagmanager.com" },
+
+  { "tool": "Segment", "type": "script_host", "pattern": "cdn.segment.com" },
+
+  { "tool": "Shopify", "type": "script_host", "pattern": "cdn.shopify.com" },
+  { "tool": "Shopify", "type": "header_name", "pattern": "x-shopify-stage" },
+  { "tool": "Shopify", "type": "meta_generator", "pattern": "Shopify" },
+
+  { "tool": "WordPress", "type": "meta_generator", "pattern": "WordPress" },
+  { "tool": "WordPress", "type": "link_host", "pattern": "s.w.org" },
+  { "tool": "WordPress", "type": "script_path_marker", "pattern": "/wp-content/" },
+  { "tool": "WordPress", "type": "script_path_marker", "pattern": "/wp-includes/" },
+
+  { "tool": "Webflow", "type": "meta_generator", "pattern": "Webflow" },
+  { "tool": "Webflow", "type": "script_host", "pattern": "website-files.com" },
+  { "tool": "Webflow", "type": "link_host", "pattern": "website-files.com" },
+
+  { "tool": "Wix", "type": "meta_generator", "pattern": "Wix.com" },
+  { "tool": "Wix", "type": "script_host", "pattern": "parastorage.com" },
+
+  { "tool": "Squarespace", "type": "meta_generator", "pattern": "Squarespace" },
+  { "tool": "Squarespace", "type": "script_host", "pattern": "squarespace.com" },
+
+  { "tool": "Framer", "type": "meta_generator", "pattern": "Framer" },
+  { "tool": "Framer", "type": "script_host", "pattern": "framerusercontent.com" },
+  { "tool": "Framer", "type": "script_host", "pattern": "events.framer.com" },
+
+  { "tool": "Next.js", "type": "script_path_marker", "pattern": "/_next/static/" },
+
+  { "tool": "React", "type": "script_path_marker", "pattern": "unpkg.com/react" },
+  { "tool": "React", "type": "script_path_marker", "pattern": "jsdelivr.net/npm/react" },
+
+  { "tool": "Calendly", "type": "script_host", "pattern": "calendly.com" }
+]

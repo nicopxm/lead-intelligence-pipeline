@@ -151,6 +151,34 @@ Two workflows, hand-authored (not yet live-verified — see "always fix in the l
 - robots-disallowed page (domain with a `robots.txt` that disallows one of `/about`, `/pricing`, etc. for `User-agent: *`) → that page `status: "skipped", reason: "robots_disallowed"`, others unaffected.
 - Null-domain lead (`leads.domain IS NULL`) → `website.status = "skipped"`, all three pages `status: "skipped", reason: "no_domain"`, no HTTP request made at all (confirm via n8n's execution log — no `Fetch robots.txt`/`Fetch Attempt` node even runs).
 
+**Amended by #21**: `Extract Text (Attempt 1/2)` in the inner workflow, and `Build Skipped Website (no domain)`/`Aggregate Website Status` in the outer workflow, now also capture `website.raw_artifacts` (script/link hostnames, meta generator, response header names, and a small fixed set of same-origin path markers) per page — see docs/ARCHITECTURE.md's contract and docs/DECISIONS.md 2026-07-14 for why. This is a genuine amendment to an already-closed, already-verified issue, not scope creep on #21 — #20's own verification (the 5 cases above) is unaffected since `raw_artifacts` is additive and doesn't change any existing field. **Both #20 workflow JSON files need re-importing/re-verifying after this change** — the artifact-extraction code is new and untested live as of this writing; re-run at least the "normal site" case and confirm `enrichment.website.raw_artifacts.home` actually populates with plausible hostnames before trusting #21's fingerprinting against it.
+
+## Tech Stack Detector sub-workflow (#21)
+
+`n8n/workflows/tech-stack-detector.json` — sub-workflow, hand-authored (same live-editor-then-re-export caveat as #20). Input (Execute Workflow Trigger, passthrough): `{ id }`. Looks up the lead, checks whether `enrichment.website.raw_artifacts` has anything usable, reads `config/tech_fingerprints.json` from the mounted `/config` directory, matches its rules against the artifacts, and writes only `enrichment.tech_stack` (existing `website`/`news` untouched).
+
+**Config bind mount setup (do this before importing the workflow):**
+1. On the VPS, confirm this repo (or at least its `config/` directory) is present at a known absolute path — e.g. if `~/n8n` is a full clone of this repo, that's `~/n8n/config`. If `~/n8n` currently only holds copied `docker-compose.yml`/`Caddyfile` (not a full clone — check with `ls ~/n8n`), you'll need to actually clone the repo somewhere on the VPS first and note the path to its `config/` directory.
+2. Add `CONFIG_DIR=<absolute path to that config/ directory>` to `~/n8n/.env` (new var, see `.env.example`).
+3. Pull the updated `n8n/docker-compose.yml` (the `${CONFIG_DIR}:/config:ro` volume line) onto the VPS.
+4. Redeploy: `docker compose up -d --force-recreate n8n` (only `n8n` needs recreating, not `caddy`).
+5. Verify the mount actually worked: `docker compose exec n8n ls /config` should list `tech_fingerprints.json`.
+6. **Verify the "no republish needed" claim live**: edit `config/tech_fingerprints.json` on the VPS (or `git pull` a change), re-run the `Tech Stack Detector` workflow *without* restarting/republishing anything, and confirm the new rule set is picked up. Config is read fresh via the `Read Fingerprint Config` node on every execution (not cached at workflow-load time), so this should Just Work — but confirm it, don't assume it.
+
+**Import/setup:**
+1. Import `tech-stack-detector.json` into its own blank workflow canvas.
+2. `Supabase - Get Lead` and `Supabase - Update Enrichment` need the **Supabase Leads** credential re-selected (same as every prior workflow).
+3. `Read Fingerprint Config` uses n8n's built-in **Read/Write Files from Disk** node (operation: Read, path `/config/tech_fingerprints.json`) — this is n8n's sanctioned file-read mechanism, chosen specifically so we don't have to loosen `NODE_FUNCTION_ALLOW_BUILTIN` to permit raw `fs` access inside a Code node. Confirm this node type imported correctly and its file path is intact.
+4. **Set this workflow's Error Workflow** (Settings → Error Workflow) to `Lead Intake - Error Alert` (the same alert workflow #7 built) — required for the `config_unreadable` path's `Fail Execution - Config Unreadable` node to actually notify Wop. Must be published to appear in the dropdown.
+5. Publish `Tech Stack Detector`.
+6. To test manually ahead of #23: "Execute Workflow" with `{ "id": "<a leads.id that already has enrichment.website.raw_artifacts populated from a re-run #20 scrape>" }`.
+
+**Verification (per #21's acceptance criteria) — run against 3 real sites with known stacks, results go in the issue comment, not just here:**
+- Pick 3 real, currently-live sites where you can independently confirm the actual tech stack (e.g. view-source for a `generator` meta tag, or prior knowledge) — ideally covering different categories from the required list (e.g. one WordPress site, one Shopify store, one site running HubSpot/Google Analytics/Calendly). Re-scrape each via `Website Scraper` first if `raw_artifacts` isn't already populated for that lead.
+- For each: run `Tech Stack Detector`, compare `enrichment.tech_stack.detected[]` against what you independently know the site runs. Note any false positives or false negatives — the false-positive guard (host/meta/header matching, never free text) should mean zero false positives from marketing-copy mentions, but isn't a guarantee against genuinely ambiguous hosts.
+- No-HTML case: a lead whose `website.status` is `"failed"`/`"skipped"` (reuse one from #20's verification, e.g. the null-domain or all-robots-disallowed lead) → `tech_stack.status: "skipped", reason: "no_html"`, no config file even read (confirm via execution log — `Read Fingerprint Config` node never runs).
+- Config-unreadable case: temporarily rename/break the mounted file on the VPS (e.g. `mv /config/tech_fingerprints.json /config/tech_fingerprints.json.bak` inside the container's host path) or point `CONFIG_DIR` at a bad path, re-run against a lead with real artifacts, confirm `tech_stack.status: "failed", reason: "config_unreadable"`, the execution shows failed in n8n, and the Resend alert email arrives. Restore the file/path afterward and confirm a clean re-run recovers.
+
 ## Vercel CI/CD connection (#5)
 
 **App**: Next.js (TypeScript) app scaffolded in `web/` — a subdirectory, not repo root, since the repo also holds `n8n/`, `supabase/`, `docs/`, etc.

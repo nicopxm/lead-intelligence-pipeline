@@ -91,7 +91,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const row = $('Check Domain').item.json;\nconst existing = row.enrichment || {};\nconst skippedPage = { status: 'skipped', text: '', url: null, reason: 'no_domain' };\n\nconst enrichment = {\n  ...existing,\n  website: {\n    status: 'skipped',\n    pages: {\n      home: skippedPage,\n      about: skippedPage,\n      pricing: skippedPage\n    },\n    fetched_at: null\n  }\n};\n\nreturn [{ json: { id: row.id, enrichment } }];"
+        "jsCode": "const row = $('Check Domain').item.json;\nconst existing = row.enrichment || {};\nconst skippedPage = { status: 'skipped', text: '', url: null, reason: 'no_domain' };\nconst emptyArtifacts = { script_hosts: [], link_hosts: [], meta_generator: null, header_names: [], script_path_markers: [] };\n\nconst enrichment = {\n  ...existing,\n  website: {\n    status: 'skipped',\n    pages: {\n      home: skippedPage,\n      about: skippedPage,\n      pricing: skippedPage\n    },\n    raw_artifacts: {\n      home: emptyArtifacts,\n      about: emptyArtifacts,\n      pricing: emptyArtifacts\n    },\n    fetched_at: null\n  }\n};\n\nreturn [{ json: { id: row.id, enrichment } }];"
       },
       "id": "341f8c6b-6ea3-423d-8387-d4fdd644b417",
       "name": "Build Skipped Website (no domain)",
@@ -191,7 +191,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const pageResults = $input.all().map((i) => i.json);\nconst pages = {};\nfor (const r of pageResults) {\n  pages[r.pageType] = {\n    status: r.status,\n    text: r.text || '',\n    url: r.url || null,\n    ...(r.reason ? { reason: r.reason } : {})\n  };\n}\n\nconst statuses = Object.values(pages).map((p) => p.status);\nconst okCount = statuses.filter((s) => s === 'ok').length;\nlet websiteStatus;\nif (okCount === statuses.length) websiteStatus = 'ok';\nelse if (okCount === 0) websiteStatus = 'failed';\nelse websiteStatus = 'partial';\n\nconst row = $('Parse robots.txt').first().json;\nconst existing = row.enrichment || {};\n\nconst enrichment = {\n  ...existing,\n  website: {\n    status: websiteStatus,\n    pages,\n    fetched_at: new Date().toISOString()\n  }\n};\n\nreturn [{ json: { id: row.id, enrichment } }];"
+        "jsCode": "const pageResults = $input.all().map((i) => i.json);\nconst pages = {};\nconst rawArtifacts = {};\nconst emptyArtifacts = { script_hosts: [], link_hosts: [], meta_generator: null, header_names: [], script_path_markers: [] };\n\nfor (const r of pageResults) {\n  pages[r.pageType] = {\n    status: r.status,\n    text: r.text || '',\n    url: r.url || null,\n    ...(r.reason ? { reason: r.reason } : {})\n  };\n  rawArtifacts[r.pageType] = r.artifacts || emptyArtifacts;\n}\n\nconst statuses = Object.values(pages).map((p) => p.status);\nconst okCount = statuses.filter((s) => s === 'ok').length;\nlet websiteStatus;\nif (okCount === statuses.length) websiteStatus = 'ok';\nelse if (okCount === 0) websiteStatus = 'failed';\nelse websiteStatus = 'partial';\n\nconst row = $('Parse robots.txt').first().json;\nconst existing = row.enrichment || {};\n\nconst enrichment = {\n  ...existing,\n  website: {\n    status: websiteStatus,\n    pages,\n    raw_artifacts: rawArtifacts,\n    fetched_at: new Date().toISOString()\n  }\n};\n\nreturn [{ json: { id: row.id, enrichment } }];"
       },
       "id": "2b704522-5dd5-4164-9239-c8312db32eea",
       "name": "Aggregate Website Status",
