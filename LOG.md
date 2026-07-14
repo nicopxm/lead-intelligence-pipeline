@@ -7,3 +7,4 @@
 2026-07-08 — Y: #5–6 done, sprint goal met. T: #17 styling shipped; #8 closed — fresh e2e, deliberate-failure test passed (credential-edit ≠ republish finding), 71s recording linked. HubSpot company-field scare = display only. Sprint 1 complete, 2 days early. B: none.
 2026-07-09 — Y: Sprint 1 closed. T: rest day; side quest (friend's job hunt). B: none.
 2026-07-10 — Y: rest. T: Sprint 1 retro. B: none.
+2026-07-13 — Y: weekend off. T: Sprint 2 planned (#19–25 created, boarded); #19 closed (contract, LOG hook, migration, 3 DECISIONS); #20 closed (scraper — all 5 hostile cases passed live incl. robots-disallowed; 2 live-found bugs: $json.data vs .body, empty-content threshold 40→80 via Excalidraw); robots.txt posture decided (minimal enforcement over policy-only); #21 next. B: none.
