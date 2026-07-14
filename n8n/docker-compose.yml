@@ -8,6 +8,7 @@ services:
       - N8N_PORT=5678
       - WEBHOOK_URL=https://${N8N_HOST}/
       - GENERIC_TIMEZONE=${GENERIC_TIMEZONE:-UTC}
+      - N8N_RESTRICT_FILE_ACCESS_TO=/config
     volumes:
       - n8n_data:/home/node/.n8n
       - ${CONFIG_DIR}:/config:ro
