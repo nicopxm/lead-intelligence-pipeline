@@ -5,11 +5,14 @@
       "parameters": {
         "inputSource": "passthrough"
       },
-      "id": "2d3d4f7b-6ee9-4066-97e1-697f666fa5fd",
+      "id": "b2693fb5-8607-481f-bcb9-359cf024283a",
       "name": "When Executed by Another Workflow",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.1,
-      "position": [-1760, 0]
+      "position": [
+        -896,
+        160
+      ]
     },
     {
       "parameters": {
@@ -24,11 +27,14 @@
           ]
         }
       },
-      "id": "3659c68b-2213-4027-9bbe-ca4387dacffe",
+      "id": "6f9e93ee-7848-4aef-8573-dab19f7378b2",
       "name": "Supabase - Get Lead",
       "type": "n8n-nodes-base.supabase",
       "typeVersion": 1,
-      "position": [-1536, 0],
+      "position": [
+        -672,
+        160
+      ],
       "credentials": {
         "supabaseApi": {
           "id": "4pPsx2sAVgrzJm5n",
@@ -40,11 +46,14 @@
       "parameters": {
         "jsCode": "const row = $json;\nconst artifacts = (row.enrichment && row.enrichment.website && row.enrichment.website.raw_artifacts) || {};\n\nconst hasArtifacts = Object.values(artifacts).some((a) =>\n  a && (\n    (a.script_hosts && a.script_hosts.length) ||\n    (a.link_hosts && a.link_hosts.length) ||\n    a.meta_generator ||\n    (a.header_names && a.header_names.length) ||\n    (a.script_path_markers && a.script_path_markers.length)\n  )\n);\n\nreturn [{ json: { ...row, hasArtifacts } }];"
       },
-      "id": "d1076731-33a8-42b5-85b7-1e6b4b4d9fe8",
+      "id": "01580b3d-6f8a-411e-b288-5ca9a5d63abd",
       "name": "Check Has Artifacts",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-1312, 0]
+      "position": [
+        -448,
+        160
+      ]
     },
     {
       "parameters": {
@@ -71,54 +80,69 @@
         },
         "options": {}
       },
-      "id": "b35d5231-0509-4967-aabd-66943b07a824",
+      "id": "7e389ce4-d76a-421d-94e5-6b01803b22d9",
       "name": "Has Artifacts?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [-1088, 0]
+      "position": [
+        -224,
+        160
+      ]
     },
     {
       "parameters": {
         "jsCode": "const row = $('Check Has Artifacts').item.json;\nconst existing = row.enrichment || {};\nconst enrichment = {\n  ...existing,\n  tech_stack: {\n    status: 'skipped',\n    detected: [],\n    method: 'fingerprint',\n    reason: 'no_html'\n  }\n};\n\nreturn [{ json: { id: row.id, enrichment } }];"
       },
-      "id": "fbf96c21-01da-4251-93d4-a3c2e77452f3",
+      "id": "33ff6a3e-d47b-407a-bb0f-9e9d5f069b9b",
       "name": "Build Skipped Tech Stack",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-864, 160]
+      "position": [
+        0,
+        320
+      ]
     },
     {
       "parameters": {
-        "operation": "read",
         "fileSelector": "/config/tech_fingerprints.json",
         "options": {}
       },
-      "id": "7b558637-7cdc-4054-8d44-979518b17e82",
+      "id": "e1b7dd48-1b3a-48e4-b790-f8df717c2c9e",
       "name": "Read Fingerprint Config",
       "type": "n8n-nodes-base.readWriteFile",
       "typeVersion": 1,
-      "position": [-864, -160],
+      "position": [
+        0,
+        0
+      ],
+      "alwaysOutputData": true,
       "onError": "continueErrorOutput"
     },
     {
       "parameters": {
-        "jsCode": "try {\n  const binary = $input.item.binary.data;\n  const buffer = Buffer.from(binary.data, 'base64');\n  const rules = JSON.parse(buffer.toString('utf-8'));\n  if (!Array.isArray(rules)) throw new Error('fingerprint config is not an array');\n  return [{ json: { configOk: true, rules } }];\n} catch (e) {\n  return [{ json: { configOk: false, rules: [] } }];\n}"
+        "jsCode": "try {\n  const buffer = await this.helpers.getBinaryDataBuffer(0, 'data');\n  const rules = JSON.parse(buffer.toString('utf-8'));\n  if (!Array.isArray(rules)) throw new Error('fingerprint config is not an array');\n  return [{ json: { configOk: true, rules } }];\n} catch (e) {\n  return [{ json: { configOk: false, rules: [] } }];\n}\n"
       },
-      "id": "56f771d2-e2a7-4695-8670-2567f42b682a",
+      "id": "4efa53a9-4e98-4c4f-b25a-d250f994cd05",
       "name": "Parse Config",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-640, -160]
+      "position": [
+        224,
+        0
+      ]
     },
     {
       "parameters": {
         "jsCode": "return [{ json: { configOk: false, rules: [] } }];"
       },
-      "id": "1b78bc29-f957-4284-84d3-6be286640686",
+      "id": "1934d045-01d0-445b-93d5-e8e356b6207d",
       "name": "Config Read Failed",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-640, 80]
+      "position": [
+        224,
+        240
+      ]
     },
     {
       "parameters": {
@@ -145,31 +169,40 @@
         },
         "options": {}
       },
-      "id": "bfea70e7-4c44-4bcd-b516-d325e38f1a3b",
+      "id": "d802dc51-2617-4d56-8b25-85e5eac3cf14",
       "name": "Config Readable?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [-416, -80]
+      "position": [
+        448,
+        80
+      ]
     },
     {
       "parameters": {
         "jsCode": "const row = $('Check Has Artifacts').item.json;\nconst existing = row.enrichment || {};\nconst enrichment = {\n  ...existing,\n  tech_stack: {\n    status: 'failed',\n    detected: [],\n    method: 'fingerprint',\n    reason: 'config_unreadable'\n  }\n};\n\nreturn [{ json: { id: row.id, enrichment } }];"
       },
-      "id": "dfd1edbe-8134-4ad0-95f9-dfaaf17cf524",
+      "id": "3fe8af5b-def6-4480-be7e-2efa530fcbda",
       "name": "Build Failed Config Object",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-192, 80]
+      "position": [
+        672,
+        240
+      ]
     },
     {
       "parameters": {
         "jsCode": "function matches(rule, page) {\n  switch (rule.type) {\n    case 'script_host':\n      return (page.script_hosts || []).some((h) => h.includes(rule.pattern));\n    case 'link_host':\n      return (page.link_hosts || []).some((h) => h.includes(rule.pattern));\n    case 'meta_generator':\n      return !!page.meta_generator && page.meta_generator.toLowerCase().includes(rule.pattern.toLowerCase());\n    case 'header_name':\n      return (page.header_names || []).some((h) => h.toLowerCase() === rule.pattern.toLowerCase());\n    case 'script_path_marker':\n      return (page.script_path_markers || []).includes(rule.pattern);\n    default:\n      return false;\n  }\n}\n\nconst row = $('Check Has Artifacts').item.json;\nconst rules = $json.rules;\nconst rawArtifacts = (row.enrichment && row.enrichment.website && row.enrichment.website.raw_artifacts) || {};\n\nconst detected = new Set();\nfor (const page of Object.values(rawArtifacts)) {\n  if (!page) continue;\n  for (const rule of rules) {\n    if (matches(rule, page)) detected.add(rule.tool);\n  }\n}\n\nconst existing = row.enrichment || {};\nconst enrichment = {\n  ...existing,\n  tech_stack: {\n    status: 'ok',\n    detected: Array.from(detected).sort(),\n    method: 'fingerprint'\n  }\n};\n\nreturn [{ json: { id: row.id, enrichment } }];"
       },
-      "id": "c3c926d5-bdb3-4a8f-a339-dc8d093e1a6e",
+      "id": "498ff70f-6cec-485b-80ea-3eb58d1cec69",
       "name": "Run Fingerprint Matching",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-192, -160]
+      "position": [
+        672,
+        0
+      ]
     },
     {
       "parameters": {
@@ -193,11 +226,14 @@
           ]
         }
       },
-      "id": "1664b450-3d1b-44d6-b44e-7eae49926fa6",
+      "id": "19db7b2a-8707-4fed-9cb7-657ff683fff0",
       "name": "Supabase - Update Enrichment",
       "type": "n8n-nodes-base.supabase",
       "typeVersion": 1,
-      "position": [96, 0],
+      "position": [
+        960,
+        160
+      ],
       "credentials": {
         "supabaseApi": {
           "id": "4pPsx2sAVgrzJm5n",
@@ -229,75 +265,218 @@
         },
         "options": {}
       },
-      "id": "8008064d-aefd-4afd-95f5-7980e4f4b517",
+      "id": "8c114889-168e-42c0-918b-087a17db95ab",
       "name": "Config Unreadable?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [320, 0]
+      "position": [
+        1184,
+        160
+      ]
     },
     {
       "parameters": {
         "errorMessage": "=Tech Stack Detector: config/tech_fingerprints.json could not be read for lead {{ $json.id }} (check the /config bind mount on the n8n container). tech_stack.status written as failed/config_unreadable; replayable once the mount/file is fixed."
       },
-      "id": "9eb27faa-6fa9-4f42-8108-be8ee8d57d54",
+      "id": "acd80125-1f01-4509-9127-64c482f4d3fa",
       "name": "Fail Execution - Config Unreadable",
       "type": "n8n-nodes-base.stopAndError",
       "typeVersion": 1,
-      "position": [544, -80]
+      "position": [
+        1408,
+        80
+      ]
     }
   ],
-  "pinData": {},
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "id": "17bf564d-f81e-4fc5-bc59-c33df8d12b79"
+        }
+      }
+    ]
+  },
   "connections": {
     "When Executed by Another Workflow": {
-      "main": [[{ "node": "Supabase - Get Lead", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Supabase - Get Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Supabase - Get Lead": {
-      "main": [[{ "node": "Check Has Artifacts", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Check Has Artifacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Check Has Artifacts": {
-      "main": [[{ "node": "Has Artifacts?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Has Artifacts?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Has Artifacts?": {
       "main": [
-        [{ "node": "Read Fingerprint Config", "type": "main", "index": 0 }],
-        [{ "node": "Build Skipped Tech Stack", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Read Fingerprint Config",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Skipped Tech Stack",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Build Skipped Tech Stack": {
-      "main": [[{ "node": "Supabase - Update Enrichment", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Supabase - Update Enrichment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Read Fingerprint Config": {
       "main": [
-        [{ "node": "Parse Config", "type": "main", "index": 0 }],
-        [{ "node": "Config Read Failed", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Parse Config",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Config Read Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Parse Config": {
-      "main": [[{ "node": "Config Readable?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Config Readable?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Config Read Failed": {
-      "main": [[{ "node": "Config Readable?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Config Readable?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Config Readable?": {
       "main": [
-        [{ "node": "Run Fingerprint Matching", "type": "main", "index": 0 }],
-        [{ "node": "Build Failed Config Object", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Run Fingerprint Matching",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Failed Config Object",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Build Failed Config Object": {
-      "main": [[{ "node": "Supabase - Update Enrichment", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Supabase - Update Enrichment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Run Fingerprint Matching": {
-      "main": [[{ "node": "Supabase - Update Enrichment", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Supabase - Update Enrichment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Supabase - Update Enrichment": {
-      "main": [[{ "node": "Config Unreadable?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Config Unreadable?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Config Unreadable?": {
       "main": [
-        [{ "node": "Fail Execution - Config Unreadable", "type": "main", "index": 0 }],
-        []
+        [
+          {
+            "node": "Fail Execution - Config Unreadable",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
-  }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "Yl0d71QmNV63K9MI",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "70effcfa-68d2-4c10-becf-d08389982da5",
+  "meta": {
+    "instanceId": "68dc6225d3bd91f509f1622e5bc9ca13d6bb79e6e162b7d2abe02d53fb814dcd"
+  },
+  "nodeGroups": [],
+  "id": "KJwL27hbsuZ6ewng",
+  "tags": []
 }
