@@ -107,18 +107,19 @@ The `leads.enrichment` JSONB column (see #7's migration) holds one object per le
     "reason": "no_html | config_unreadable"
   },
   "news": {
-    "status": "ok | partial | failed | skipped",
-    "items": [{ "title": "...", "url": "...", "published_at": "..." }],
+    "status": "ok | failed | skipped",
+    "items": [{ "title": "...", "source": "...", "date": "...", "url": "..." }],
+    "reason": "no_company | fetch_failed | parse_failed",
     "fetched_at": "2026-07-13T12:00:00Z"
   }
 }
 ```
 
-Status meanings (consistent across all three steps):
+Status meanings (consistent across all three steps, though not every step uses every value — `news` has no `partial`, its RSS query is one atomic fetch, not several pages that can fail independently):
 - `ok` — step ran and returned usable data
 - `partial` — step ran but some sub-parts failed (e.g. one of three pages, or a fingerprint match with low confidence)
 - `failed` — step ran and returned nothing usable
-- `skipped` — step never ran (e.g. `website`/`tech_stack` skipped when `domain` is null; the intelligence prompt is written to handle sparse/skipped input honestly, per decision #7)
+- `skipped` — step never ran (e.g. `website`/`tech_stack` skipped when `domain` is null; `news` skipped when `company` is null; the intelligence prompt is written to handle sparse/skipped input honestly, per decision #7)
 
 Per-page status (added by issue #20, `website.pages.*` only) uses a narrower enum than the step-level status above — `ok | failed | skipped`, no `partial` (partial only describes the aggregate across pages). A `reason` field is present whenever a page's status isn't `ok`:
 - `fetch_failed` — request errored, timed out, or returned a non-2xx status after the retry
@@ -133,6 +134,15 @@ Per-page status (added by issue #20, `website.pages.*` only) uses a narrower enu
 `tech_stack`'s per-step `reason` (added by issue #21) is present whenever status isn't `ok`:
 - `no_html` — `website.raw_artifacts` had no usable pages to fingerprint against (website step failed or was skipped entirely) — not an error, a graceful skip
 - `config_unreadable` — `config/tech_fingerprints.json` could not be read at execution time (bind mount missing, file malformed, etc.) — this **is** an operational failure and fires the error-alert path (unlike every other `skipped`/`failed` reason in this contract, which are expected, graceful outcomes)
+
+`news`'s per-step `reason` (added by issue #22) is present whenever status isn't `ok`:
+- `no_company` — the lead has no `company` value, so no query could be built (status is `skipped`, not `failed` — no error occurred, we chose not to query)
+- `fetch_failed` — the Google News RSS request errored, timed out, or returned a non-2xx status after the retry
+- `parse_failed` — the request succeeded but the response body wasn't parseable as the expected RSS/XML shape
+
+Zero matching articles is a normal, expected outcome for an obscure or newly-formed company — it is **not** a failure. `news.status` is `ok` with `items: []` in that case; only a genuine fetch/parse breakdown sets `status: failed`.
+
+**Name-collision risk (documented per #22, feeds Sprint 3 prompt design):** the query is the company name in quotes, not disambiguated by domain or industry — a lead named "Atlas" or "Summit" will pull news for every unrelated company sharing that name. This is a known, accepted limitation of free RSS search (no company-ID lookup available at this cost tier). `news.items` must therefore be treated as **weak evidence** by the Sprint 3 scoring prompt, not a verified signal — the prompt should be written to cite news cautiously (e.g. "may relate to a same-named company") rather than asserting buying signals from it at face value. Fetch honestly, score skeptically; no relevance filtering happens at fetch time.
 
 `leads.enriched_at` (added in this issue's migration) is set once orchestration finishes writing this object, regardless of how many sub-steps came back partial/failed/skipped — it marks "enrichment ran," not "enrichment fully succeeded."
 

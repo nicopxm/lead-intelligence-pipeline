@@ -8,3 +8,4 @@
 2026-07-09 — Y: Sprint 1 closed. T: rest day; side quest (friend's job hunt). B: none.
 2026-07-10 — Y: rest. T: Sprint 1 retro. B: none.
 2026-07-13 — Y: weekend off. T: Sprint 2 planned (#19–25 created, boarded); #19 closed (contract, LOG hook, migration, 3 DECISIONS); #20 closed (scraper — all 5 hostile cases passed live incl. robots-disallowed; 2 live-found bugs: $json.data vs .body, empty-content threshold 40→80 via Excalidraw); robots.txt posture decided (minimal enforcement over policy-only); #21 next. B: none.
+2026-07-14 — Y: #21 closed (fingerprinting live-verified on 3 known stacks; alert path proven via real trigger, not assumed; raw_artifacts amendment to #20 documented; config bind-mount pattern set for Sprint 3; 4 new RUNBOOK gotchas). T: #22 news RSS, then #23 orchestration if time. B: none.

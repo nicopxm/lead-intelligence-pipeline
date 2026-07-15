@@ -1,0 +1,405 @@
+{
+  "name": "News RSS",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "b3d5b6a1-6c8e-4c6a-8e9a-1f2b3c4d5e6f",
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1216,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "tableId": "leads",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        }
+      },
+      "id": "9c1a2b3c-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+      "name": "Supabase - Get Lead",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -992,
+        160
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "4pPsx2sAVgrzJm5n",
+          "name": "Supabase Leads"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $json;\nconst hasCompany = !!(row.company && row.company.trim());\n\nreturn [{ json: { ...row, hasCompany } }];"
+      },
+      "id": "1d2e3f4a-5b6c-7d8e-9f0a-1b2c3d4e5f6a",
+      "name": "Check Has Company",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -768,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-has-company",
+              "leftValue": "={{ $json.hasCompany }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2e3f4a5b-6c7d-8e9f-0a1b-2c3d4e5f6a7b",
+      "name": "Has Company?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -544,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $json;\nconst existing = row.enrichment || {};\nconst enrichment = {\n  ...existing,\n  news: {\n    status: 'skipped',\n    items: [],\n    reason: 'no_company',\n    fetched_at: new Date().toISOString()\n  }\n};\n\nreturn [{ json: { id: row.id, enrichment } }];"
+      },
+      "id": "3f4a5b6c-7d8e-9f0a-1b2c-3d4e5f6a7b8c",
+      "name": "Build Skipped News (no_company)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -320,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $json;\nconst company = row.company.trim();\nconst q = `\"${company}\"`;\nconst rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en-US&gl=US&ceid=US:en`;\n\nreturn [{ json: { id: row.id, enrichment: row.enrichment || {}, rssUrl } }];"
+      },
+      "id": "4a5b6c7d-8e9f-0a1b-2c3d-4e5f6a7b8c9d",
+      "name": "Build News Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -320,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.rssUrl }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "id": "5b6c7d8e-9f0a-1b2c-3d4e-5f6a7b8c9d0e",
+      "name": "Fetch News RSS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -96,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $('Build News Query').item.json;\nconst existing = row.enrichment || {};\nconst enrichment = {\n  ...existing,\n  news: {\n    status: 'failed',\n    items: [],\n    reason: 'fetch_failed',\n    fetched_at: new Date().toISOString()\n  }\n};\n\nreturn [{ json: { id: row.id, enrichment } }];"
+      },
+      "id": "6c7d8e9f-0a1b-2c3d-4e5f-6a7b8c9d0e1f",
+      "name": "Build Failed News (fetch_failed)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        128,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "xmlToJson",
+        "options": {}
+      },
+      "id": "7d8e9f0a-1b2c-3d4e-5f6a-7b8c9d0e1f2a",
+      "name": "Parse RSS XML",
+      "type": "n8n-nodes-base.xml",
+      "typeVersion": 1,
+      "position": [
+        128,
+        -80
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $('Build News Query').item.json;\nconst existing = row.enrichment || {};\nconst enrichment = {\n  ...existing,\n  news: {\n    status: 'failed',\n    items: [],\n    reason: 'parse_failed',\n    fetched_at: new Date().toISOString()\n  }\n};\n\nreturn [{ json: { id: row.id, enrichment } }];"
+      },
+      "id": "8e9f0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
+      "name": "Build Failed News (parse_failed)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        352,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $('Build News Query').item.json;\nconst existing = row.enrichment || {};\nconst channel = ($json.rss && $json.rss.channel) || {};\nlet rawItems = channel.item || [];\nif (!Array.isArray(rawItems)) rawItems = [rawItems];\n\nconst NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;\nconst cutoff = Date.now() - NINETY_DAYS_MS;\n\nconst items = rawItems\n  .map((it) => {\n    const dateObj = it.pubDate ? new Date(it.pubDate) : null;\n    const dateMs = dateObj && !isNaN(dateObj.getTime()) ? dateObj.getTime() : null;\n    let source = null;\n    if (it.source) {\n      source = typeof it.source === 'string' ? it.source : (it.source._ || null);\n    }\n    return {\n      title: it.title || '',\n      source,\n      date: dateMs !== null ? dateObj.toISOString() : null,\n      url: it.link || '',\n      _ms: dateMs\n    };\n  })\n  .filter((it) => it._ms !== null && it._ms >= cutoff)\n  .sort((a, b) => b._ms - a._ms)\n  .slice(0, 5)\n  .map(({ _ms, ...rest }) => rest);\n\nconst enrichment = {\n  ...existing,\n  news: {\n    status: 'ok',\n    items,\n    fetched_at: new Date().toISOString()\n  }\n};\n\nreturn [{ json: { id: row.id, enrichment } }];"
+      },
+      "id": "9f0a1b2c-3d4e-5f6a-7b8c-9d0e1f2a3b4c",
+      "name": "Extract News Items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        352,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "leads",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "enrichment",
+              "fieldValue": "={{ $json.enrichment }}"
+            }
+          ]
+        }
+      },
+      "id": "0a1b2c3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d",
+      "name": "Supabase - Update Enrichment",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        608,
+        160
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "4pPsx2sAVgrzJm5n",
+          "name": "Supabase Leads"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Supabase - Get Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase - Get Lead": {
+      "main": [
+        [
+          {
+            "node": "Check Has Company",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Has Company": {
+      "main": [
+        [
+          {
+            "node": "Has Company?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Company?": {
+      "main": [
+        [
+          {
+            "node": "Build News Query",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Skipped News (no_company)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Skipped News (no_company)": {
+      "main": [
+        [
+          {
+            "node": "Supabase - Update Enrichment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build News Query": {
+      "main": [
+        [
+          {
+            "node": "Fetch News RSS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch News RSS": {
+      "main": [
+        [
+          {
+            "node": "Parse RSS XML",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Failed News (fetch_failed)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Failed News (fetch_failed)": {
+      "main": [
+        [
+          {
+            "node": "Supabase - Update Enrichment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse RSS XML": {
+      "main": [
+        [
+          {
+            "node": "Extract News Items",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Failed News (parse_failed)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Failed News (parse_failed)": {
+      "main": [
+        [
+          {
+            "node": "Supabase - Update Enrichment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract News Items": {
+      "main": [
+        [
+          {
+            "node": "Supabase - Update Enrichment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "Yl0d71QmNV63K9MI",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "f20ba3cd-8eea-4e19-a107-d354f96becbd",
+  "meta": {
+    "instanceId": "68dc6225d3bd91f509f1622e5bc9ca13d6bb79e6e162b7d2abe02d53fb814dcd"
+  },
+  "nodeGroups": [],
+  "id": "BQ8Ye9wBJBjSpCgL",
+  "tags": []
+}
