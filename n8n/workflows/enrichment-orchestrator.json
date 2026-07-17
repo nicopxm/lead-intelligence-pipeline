@@ -1,0 +1,327 @@
+{
+  "name": "Enrichment Orchestrator",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "a1b1c1d1-0001-4001-8001-000000000001",
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [-1440, 160]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { id: $json.id, startedAtMs: Date.now() } }];"
+      },
+      "id": "a1b1c1d1-0002-4001-8001-000000000002",
+      "name": "Record Start Time",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1216, 160]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "pM7mW9mH5nC6nyIz",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/pM7mW9mH5nC6nyIz",
+          "cachedResultName": "Website Scraper"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "a1b1c1d1-0003-4001-8001-000000000003",
+      "name": "Execute Workflow - Website Scraper",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [-992, 160]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { id: $('Record Start Time').item.json.id } }];"
+      },
+      "id": "a1b1c1d1-0004-4001-8001-000000000004",
+      "name": "Reset ID After Website",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-768, 160]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "KJwL27hbsuZ6ewng",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/KJwL27hbsuZ6ewng",
+          "cachedResultName": "Tech Stack Detector"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "a1b1c1d1-0005-4001-8001-000000000005",
+      "name": "Execute Workflow - Tech Stack Detector",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [-544, 160]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { id: $('Record Start Time').item.json.id } }];"
+      },
+      "id": "a1b1c1d1-0006-4001-8001-000000000006",
+      "name": "Reset ID After Tech Stack",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-320, 160]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "BQ8Ye9wBJBjSpCgL",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/BQ8Ye9wBJBjSpCgL",
+          "cachedResultName": "News RSS"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "a1b1c1d1-0007-4001-8001-000000000007",
+      "name": "Execute Workflow - News RSS",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [-96, 160]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "tableId": "leads",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "keyValue": "={{ $('Record Start Time').item.json.id }}"
+            }
+          ]
+        }
+      },
+      "id": "a1b1c1d1-0008-4001-8001-000000000008",
+      "name": "Supabase - Get Lead",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [128, 160],
+      "credentials": {
+        "supabaseApi": {
+          "id": "4pPsx2sAVgrzJm5n",
+          "name": "Supabase Leads"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $json;\nconst enrichment = row.enrichment || {};\nconst website = enrichment.website || {};\nconst techStack = enrichment.tech_stack || {};\nconst news = enrichment.news || {};\n\nconst okStatuses = new Set(['ok', 'partial']);\nconst anyOk = [website, techStack, news].some((c) => okStatuses.has(c.status));\n\nconst startedAtMs = $('Record Start Time').item.json.startedAtMs;\nconst durationMs = Date.now() - startedAtMs;\n\nreturn [{\n  json: {\n    id: row.id,\n    anyOk,\n    durationMs\n  }\n}];"
+      },
+      "id": "a1b1c1d1-0009-4001-8001-000000000009",
+      "name": "Compute Overall Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [352, 160]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-any-ok",
+              "leftValue": "={{ $json.anyOk }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1b1c1d1-0010-4001-8001-000000000010",
+      "name": "Any Component OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [576, 160]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "leads",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "enriched"
+            },
+            {
+              "fieldId": "enriched_at",
+              "fieldValue": "={{ new Date().toISOString() }}"
+            },
+            {
+              "fieldId": "enrichment_duration_ms",
+              "fieldValue": "={{ $json.durationMs }}"
+            }
+          ]
+        }
+      },
+      "id": "a1b1c1d1-0011-4001-8001-000000000011",
+      "name": "Supabase - Mark Enriched",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [800, 64],
+      "credentials": {
+        "supabaseApi": {
+          "id": "4pPsx2sAVgrzJm5n",
+          "name": "Supabase Leads"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "leads",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "enrichment_duration_ms",
+              "fieldValue": "={{ $json.durationMs }}"
+            }
+          ]
+        }
+      },
+      "id": "a1b1c1d1-0012-4001-8001-000000000012",
+      "name": "Supabase - Record Duration Only",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [800, 288],
+      "credentials": {
+        "supabaseApi": {
+          "id": "4pPsx2sAVgrzJm5n",
+          "name": "Supabase Leads"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "errorMessage": "=Enrichment Orchestrator: lead {{ $json.id }} finished with no usable enrichment (website/tech_stack/news all came back failed or skipped). leads.status remains 'raw', replayable after investigating the underlying cause."
+      },
+      "id": "a1b1c1d1-0013-4001-8001-000000000013",
+      "name": "Fail Execution - All Enrichment Failed",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [1024, 288]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [[{ "node": "Record Start Time", "type": "main", "index": 0 }]]
+    },
+    "Record Start Time": {
+      "main": [[{ "node": "Execute Workflow - Website Scraper", "type": "main", "index": 0 }]]
+    },
+    "Execute Workflow - Website Scraper": {
+      "main": [[{ "node": "Reset ID After Website", "type": "main", "index": 0 }]]
+    },
+    "Reset ID After Website": {
+      "main": [[{ "node": "Execute Workflow - Tech Stack Detector", "type": "main", "index": 0 }]]
+    },
+    "Execute Workflow - Tech Stack Detector": {
+      "main": [[{ "node": "Reset ID After Tech Stack", "type": "main", "index": 0 }]]
+    },
+    "Reset ID After Tech Stack": {
+      "main": [[{ "node": "Execute Workflow - News RSS", "type": "main", "index": 0 }]]
+    },
+    "Execute Workflow - News RSS": {
+      "main": [[{ "node": "Supabase - Get Lead", "type": "main", "index": 0 }]]
+    },
+    "Supabase - Get Lead": {
+      "main": [[{ "node": "Compute Overall Status", "type": "main", "index": 0 }]]
+    },
+    "Compute Overall Status": {
+      "main": [[{ "node": "Any Component OK?", "type": "main", "index": 0 }]]
+    },
+    "Any Component OK?": {
+      "main": [
+        [{ "node": "Supabase - Mark Enriched", "type": "main", "index": 0 }],
+        [{ "node": "Supabase - Record Duration Only", "type": "main", "index": 0 }]
+      ]
+    },
+    "Supabase - Record Duration Only": {
+      "main": [[{ "node": "Fail Execution - All Enrichment Failed", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "Yl0d71QmNV63K9MI",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "00000000-0000-4000-8000-000000000001",
+  "meta": {
+    "instanceId": "68dc6225d3bd91f509f1622e5bc9ca13d6bb79e6e162b7d2abe02d53fb814dcd"
+  },
+  "nodeGroups": [],
+  "id": "eOrcH3strAt0r01a",
+  "tags": []
+}
