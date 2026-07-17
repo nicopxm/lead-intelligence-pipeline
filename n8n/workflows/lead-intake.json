@@ -254,6 +254,36 @@
           "name": "HubSpot Service Key"
         }
       }
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "eOrcH3strAt0r01a",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/eOrcH3strAt0r01a",
+          "cachedResultName": "Enrichment Orchestrator"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "id": "b2c2d2e2-0001-4002-8002-000000000001",
+      "name": "Execute Workflow - Enrichment Orchestrator",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -224,
+        240
+      ]
     }
   ],
   "pinData": {},
@@ -303,6 +333,11 @@
         [
           {
             "node": "HubSpot - Create Contact",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Execute Workflow - Enrichment Orchestrator",
             "type": "main",
             "index": 0
           }
