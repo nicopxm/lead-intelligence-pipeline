@@ -44,7 +44,9 @@
       "name": "Execute Workflow - Website Scraper",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
-      "position": [-992, 160]
+      "position": [-992, 160],
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -79,7 +81,9 @@
       "name": "Execute Workflow - Tech Stack Detector",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
-      "position": [-544, 160]
+      "position": [-544, 160],
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -114,7 +118,9 @@
       "name": "Execute Workflow - News RSS",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
-      "position": [-96, 160]
+      "position": [-96, 160],
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
