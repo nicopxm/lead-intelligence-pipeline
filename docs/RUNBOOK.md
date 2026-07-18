@@ -21,6 +21,34 @@ Operational reference: infra provisioning, restore-from-scratch, and day-2 proce
 - [x] Demo-ready form styling (#17)
 - [ ] Restore-from-scratch procedure (full stack)
 
+## GitHub Projects board (#1)
+
+Board: https://github.com/users/nicopxm/projects/1 (user-owned project, number 1). Columns are a single-select `Status` field: `Backlog` / `Sprint` / `In Progress` / `Done`.
+
+**Root cause found and fixed 2026-07-17**: the project had **zero repositories linked to it** (`repository(...).projectsV2` and `projectV2(...).repositories` both returned empty), even though the built-in `Auto-add to project` workflow showed `enabled: true`. A GitHub Projects automation with nothing to watch does nothing — every issue that ever appeared on the board (#1–#25) got there via manual add during scaffolding or a same-session `gh project item-add`, never automatically. This is why issue #26 (filed via `gh issue create` mid-#23) never showed up on the board at all, and why #24/#25 sat stale in the `Sprint` column after rolling to Backlog — nothing was ever re-syncing the board against actual issue state.
+
+**Fix**: linked the repo via `gh api graphql -f query='mutation { linkProjectV2ToRepository(input: {projectId: "PVT_kwHOBqSzx84BcUc0", repositoryId: "R_kgDOTL4SSw"}) { repository { nameWithOwner } } }'`. Verified live, not assumed: created a throwaway test issue immediately after, confirmed it auto-added to the board within ~4 seconds, then closed the test issue and removed it from the board (`gh project item-delete`) to avoid leaving noise.
+
+Other workflow states as of 2026-07-17 (`gh api graphql` query on `projectV2(number: 1) { workflows(first: 10) { nodes { name number enabled } } }`): `Auto-add sub-issues to project` (on), `Auto-add to project` (on, now actually functional), `Item closed` (on — this is what moves a card to Done when `gh issue close` runs, confirmed working for #23), `Auto-close issue` / `Item added to project` / `Pull request linked to issue` / `Pull request merged` (all off — not currently relied on).
+
+**Useful commands:**
+```bash
+# List all board items with their Status column
+gh project item-list 1 --owner nicopxm --format json
+
+# Get the Status field's option IDs (Backlog/Sprint/In Progress/Done)
+gh project field-list 1 --owner nicopxm --format json
+
+# Move a card (item id from item-list, field/option ids from field-list)
+gh project item-edit --project-id PVT_kwHOBqSzx84BcUc0 --id <ITEM_ID> \
+  --field-id PVTSSF_lAHOBqSzx84BcUc0zhW-KN0 --single-select-option-id <OPTION_ID>
+
+# Add an issue that didn't auto-add (shouldn't be needed now, but if it recurs)
+gh project item-add 1 --owner nicopxm --url <issue-url>
+```
+
+See CLAUDE.md's Definition of Done — board state is now a required final verification step on every issue, not assumed from automation or a `gh issue close`.
+
 ## Hetzner provisioning (#2)
 
 **Server**: Hetzner Cloud CX23 (2 vCPU / 4GB RAM / 40GB disk), Falkenstein (fsn1), Ubuntu 26.04. ~€6.49/mo.
