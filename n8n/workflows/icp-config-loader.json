@@ -3,18 +3,6 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## NOT YET DEPLOYED (#28)\nBuilt 2026-07-21, never imported into this n8n instance — VPS SSH was fail2ban-locked for the whole session. See docs/RUNBOOK.md \"ICP Config Loader (#28)\" section for the exact import/publish/verify steps before relying on this workflow, and remove this note once verified live.",
-        "height": 220,
-        "width": 360
-      },
-      "id": "a1b2c3d4-0009-4aaa-8000-000000000009",
-      "name": "Sticky Note - Deploy Pending",
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
-      "position": [-896, -220]
-    },
-    {
-      "parameters": {
         "inputSource": "passthrough"
       },
       "id": "a1b2c3d4-0001-4aaa-8000-000000000001",
