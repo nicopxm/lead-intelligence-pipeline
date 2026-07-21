@@ -1,0 +1,60 @@
+{
+  "config_version": "1.0.0-v1",
+  "tenant": "flowsignal",
+  "company_identity": {
+    "name": "FlowSignal",
+    "sender_name": "Wop",
+    "value_proposition": "Automated lead enrichment, scoring, and CRM delivery for B2B teams drowning in manual lead ops — set up in days, not quarters.",
+    "tone": "direct, warm, no corporate filler, no exclamation marks"
+  },
+  "icp_description": "FlowSignal sells to B2B companies (Series A–B or bootstrapped-profitable, 20–200 employees) that have real inbound lead volume but no dedicated RevOps function. The best-fit buyer is visibly straining under manual lead handling — hiring their first ops/SDR roles, recently funded, or growing headcount fast — and already uses a CRM or basic tooling, so they understand the category. Companies over 1000 employees are out of scope: they build in-house or buy enterprise.",
+  "scoring_dimensions": [
+    {
+      "key": "company_fit",
+      "weight": 30,
+      "ideal": "B2B; Series A–B or bootstrapped-profitable; 20–200 employees",
+      "notes": "The 'can they actually buy' gate. Misfit here poisons downstream signals. ≤200 is a deliberate SMB/lower-mid scope, not a soft preference."
+    },
+    {
+      "key": "pain_signals",
+      "weight": 30,
+      "ideal": "Hiring SDR/ops/RevOps roles; 'drowning in leads' or manual-process language; recent funding (scaling pain); fast headcount growth",
+      "notes": "Top differentiator AMONG fitting companies. Equal weight to company_fit is a v1 hypothesis — revisit after #30 human spot-check."
+    },
+    {
+      "key": "buying_intent",
+      "weight": 20,
+      "ideal": "Inbound message states a concrete problem and/or timeline; specificity beats vague curiosity"
+    },
+    {
+      "key": "tech_maturity",
+      "weight": 15,
+      "ideal": "Already runs a CRM or marketing/sales tooling — shorter sales cycle, understands the category",
+      "notes": "Fed directly by enrichment tech_stack detection."
+    },
+    {
+      "key": "market_timing",
+      "weight": 5,
+      "ideal": "Funding round <6 months old or a recent product launch",
+      "notes": "News-sourced; low weight because news is the weakest-evidence enrichment component (collision noise)."
+    }
+  ],
+  "hard_disqualifiers": [
+    "personal email with no discoverable company",
+    "student or job-seeker inquiry",
+    "obvious competitor",
+    "company larger than 1000 employees"
+  ],
+  "thresholds": {
+    "hot": 72,
+    "review": 48,
+    "nurture": 25
+  },
+  "email_rules": {
+    "max_words": 120,
+    "must_reference": ["one specific fact from enrichment"],
+    "never": ["pricing", "fake urgency", "claiming familiarity we don't have"],
+    "cta": "suggest a low-pressure 15-minute call",
+    "tone": "direct, warm, no corporate filler"
+  }
+}

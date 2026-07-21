@@ -1,5 +1,7 @@
 # Runbook — Lead Intelligence Pipeline
 
+**VPS access: `ssh lip`** — full form `ssh -i ~/.ssh/lead-intel-pipeline deploy@167.233.136.31`. The alias lives in `~/.ssh/config` (local machine only, not in this repo); if it's missing on a new machine, recreate it before doing anything else — connecting without `-i` offers the wrong key and burns a fail2ban attempt (see the lockout recovery note under "Hetzner provisioning" below).
+
 Operational reference: infra provisioning, restore-from-scratch, and day-2 procedures. Update this file whenever infra changes (server setup, Docker, env vars, restore steps).
 
 ## Infra
@@ -75,6 +77,8 @@ Create an `A` record on the domain: host = subdomain (e.g. `n8n`), answer = serv
 - `ufw`: default deny incoming, allow only 22/tcp, 80/tcp, 443/tcp. `ufw enable`.
 - `fail2ban`: `sshd` jail enabled, `banaction = ufw`, maxretry 5 / findtime 10m / bantime 1h. Config at `/etc/fail2ban/jail.local`.
 - `/etc/ssh/sshd_config.d/99-hardening.conf`: `PasswordAuthentication no`, `PermitRootLogin no`. Verify the non-root user can still connect and `sudo` works *before* reloading sshd.
+
+**SSH lockout recovery (fail2ban)** — cause: repeated failed auth within `findtime` (10m), e.g. connecting without `-i` so the wrong key gets offered, or guessing usernames. Symptom: connection refused on port 22 (not a slow timeout — the ban drops the packet outright). Fix: Hetzner's out-of-band web console is independent of the SSH-level ban and gets you in regardless — console.hetzner.cloud → the project → this server → **Console** tab → log in there, then `fail2ban-client set sshd unbanip <your-ip>` (get your current IP from `curl -s https://ifconfig.me`). If the console itself won't load from your current network, try from a phone/different network — it's a separate path from the SSH ban entirely. Otherwise it clears on its own after `bantime` (1h). Root cause found 2026-07-21: use the `lip` SSH alias above (or always pass `-i ~/.ssh/lead-intel-pipeline`) — the ban that day was from a session connecting without `-i`, which offered the wrong key on every attempt.
 
 ### Docker
 Installed via the official convenience script (`curl -fsSL https://get.docker.com | sh`), which installs `docker-ce`, `docker-ce-cli`, `containerd.io`, and the `docker-compose-plugin` (i.e. `docker compose`, no separate `docker-compose` binary). The deploy user is added to the `docker` group; Docker daemon is enabled at boot (`systemctl enable docker`).
