@@ -32,6 +32,7 @@ Full rationale: docs/ARCHITECTURE.md. Read it before structural work.
 - Legal data sources only. No LinkedIn scraping, ever.
 - Cost discipline: free tiers, cheapest options, batch/cache Claude calls where possible.
 - Monday planning updates the sprint milestone description with goal / scope notes / named day — the milestone is the planning record.
+- Reading credentials from `.env`/`web/.env.local` to run verification (Supabase/HubSpot REST or API queries) is sanctioned standing policy, not a one-off — this is how sessions confirm real production state instead of asking Wop to relay it. Three rules govern it: (1) never echo secret values into output — shape/presence checks only (pattern-match a prefix, check non-empty), same method as the secrets rule below; (2) read-only verification calls (SELECTs, GETs, searches) are fine to run unprompted, no need to ask first; (3) any WRITE to a production system via a direct API call made *outside* a workflow's own execution — inserts, deletes, config changes — gets named explicitly in the session summary, the way #24's test-row/test-contact cleanup was called out. See docs/RUNBOOK.md's "Local credentials surface" note for the key-rotation consequence of this.
 
 ## Docs to maintain
 - docs/RUNBOOK.md — update when infra changes (server setup, docker, env, restore steps)

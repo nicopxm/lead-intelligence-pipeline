@@ -10,6 +10,8 @@ Operational reference: infra provisioning, restore-from-scratch, and day-2 proce
 - **App**: Next.js on Vercel
 - **Email**: Resend
 
+**Local credentials surface**: the repo-root `.env` (gitignored, never committed) holds live production keys — `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (bypasses RLS), `HUBSPOT_TOKEN`, `RESEND_API_KEY` — and Claude Code sessions read them directly to run read-only verification queries (REST/API checks against Supabase and HubSpot) rather than asking Wop to relay results. Sanctioned as standing policy, not a one-off — see CLAUDE.md's "Working rules" for the full policy (shape-only inspection, read-only-by-default, writes get named in the session summary). Practical consequence: **key rotation on any of these services must assume a session may currently hold/use the old value from this file** — rotate the key at the provider, then update `.env` in the same pass, don't treat the file as inert until someone remembers to open it.
+
 ## Sections (fill in as each lands)
 - [x] Hetzner provisioning steps (#2)
 - [x] Docker + n8n setup and restart/reboot recovery (#2)
