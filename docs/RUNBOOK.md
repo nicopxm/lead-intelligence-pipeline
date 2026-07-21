@@ -326,13 +326,11 @@ Credentials on all six Supabase/HubSpot nodes re-linked automatically (matching 
 - Fresh `export:workflow` after all testing diffed clean against the pre-deploy commit — only `versionId` differed (n8n's own bookkeeping), no node/connection drift.
 - All test leads (Supabase rows) and the test HubSpot contact deleted after verification.
 
-## ICP Config Loader (#28) — NOT YET DEPLOYED
+## ICP Config Loader (#28)
 
-`n8n/workflows/icp-config-loader.json` — new sub-workflow, built 2026-07-21, **never imported into the running n8n instance**. VPS SSH was fail2ban-locked for the entire session it was built in (see the lockout recovery note above), so it exists only as committed JSON. Carries a Sticky Note reading "NOT YET DEPLOYED" inside the workflow itself as a second reminder — remove that note once verified live.
+`n8n/workflows/icp-config-loader.json` — sub-workflow. Execute Workflow Trigger (passthrough) → `Read ICP Config` (Read/Write Files from Disk, `/config/icp.default.json`) → `Extract from File` (fromJson) → `Validate ICP Config` (Code node: checks all required top-level/nested fields present, `scoring_dimensions` weights sum to exactly 100, `thresholds.hot > review > nurture`) → `Config Valid?` IF node. True branch is a deliberate dead end (its output — `{ configOk: true, config, config_version }` — is what a caller like #29 reads back via `$('ICP Config Loader')`, same convention as every other sub-workflow here); false branch (covers read failure, parse failure, or any validation failure) hits `Fail Execution - ICP Config Invalid` (Stop and Error), which fails the execution loudly and fires the shared `Lead Intake - Error Alert` workflow via `settings.errorWorkflow` — mirrors Tech Stack Detector's `config_unreadable` pattern exactly, so an invalid ICP config alerts the same way a broken fingerprint config does, never falling back to a silent default.
 
-**What it does**: Execute Workflow Trigger (passthrough) → `Read ICP Config` (Read/Write Files from Disk, `/config/icp.default.json`) → `Extract from File` (fromJson) → `Validate ICP Config` (Code node: checks all required top-level/nested fields present, `scoring_dimensions` weights sum to exactly 100, `thresholds.hot > review > nurture`) → `Config Valid?` IF node. True branch is a deliberate dead end (its output — `{ configOk: true, config, config_version }` — is what a caller like #29 reads back via `$('ICP Config Loader')`, same convention as every other sub-workflow here); false branch (covers read failure, parse failure, or any validation failure) hits `Fail Execution - ICP Config Invalid` (Stop and Error), which fails the execution loudly and fires the shared `Lead Intake - Error Alert` workflow via `settings.errorWorkflow` — mirrors Tech Stack Detector's `config_unreadable` pattern exactly, so an invalid ICP config alerts the same way a broken fingerprint config does, never falling back to a silent default.
-
-**Remaining deploy steps (run once VPS access is restored — use `ssh lip`, not raw IP, see top of file):**
+**Deploy (CLI-only path, use the `lip` SSH alias):**
 ```bash
 scp n8n/workflows/icp-config-loader.json lip:/tmp/
 ssh lip "docker cp /tmp/icp-config-loader.json n8n-n8n-1:/tmp/icp-config-loader.json"
@@ -340,19 +338,18 @@ ssh lip "docker exec n8n-n8n-1 n8n import:workflow --input=/tmp/icp-config-loade
 ssh lip "docker exec n8n-n8n-1 n8n publish:workflow --id=iCPCfgLoader0001"
 ssh lip "docker compose -f ~/n8n/docker-compose.yml restart n8n"
 ```
-Then, same pattern as #21/#26:
-1. Confirm `Lead Intake - Error Alert` is already selected as this workflow's Error Workflow post-import (`settings.errorWorkflow` is in the committed JSON, so this should just round-trip — confirm via `export:workflow`, don't assume).
-2. **Valid-config path**: manually execute the workflow (editor "Execute Workflow" or via a throwaway caller) against the real, committed `config/icp.default.json` — confirm it returns `{ configOk: true, config: {...}, config_version: "1.0.0-v1" }` with no execution failure.
-3. **Invalid-config path** (don't skip this — it's the actual point of #28's validation AC): temporarily break the live file on the VPS in each of these ways, one at a time, re-running after each and reverting before the next:
-   - Corrupt the JSON (e.g. delete a closing brace) → expect `Config Parse Failed` branch, execution fails, alert fires.
-   - Change one `scoring_dimensions[].weight` so they no longer sum to 100 → expect `Validate ICP Config` to catch it (`reason_detail` should say "weights sum to X, must sum to exactly 100"), execution fails, alert fires.
-   - Set `thresholds.review` higher than `thresholds.hot` → expect `Validate ICP Config` to catch the ordering violation, execution fails, alert fires.
-   - Rename/move the file so it can't be read at all → expect `Config Read Failed` branch, execution fails, alert fires.
-   - Restore the real file after each case and confirm a clean re-run recovers (`configOk: true` again) — don't leave the live config broken.
-4. Confirm each alert actually arrived (Resend send log or inbox), not just that the execution shows failed in n8n.
-5. Fresh `export:workflow` afterward, diff against the committed JSON — should be clean except `versionId`.
-6. Remove the "NOT YET DEPLOYED" sticky note from the workflow (in the editor), re-export, commit.
-7. Only then does #28 actually close — update the issue comment with the verification evidence (per-case pass/fail, alert confirmation) and flip its board status to Done.
+
+**Deploy gotcha found live 2026-07-21**: the VPS's repo clone at `/home/deploy/lead-intelligence-pipeline` (source for `CONFIG_DIR`'s bind mount) was several sprints stale — last synced around #21, missing every commit since including `config/icp.default.json` itself. `docker compose exec n8n cat /config/icp.default.json` returned "No such file" until a plain `git pull origin main` on that VPS clone brought it current. Worth a standing check before trusting `/config/*` contents on this VPS: the bind mount only serves what that clone actually has on disk, and nothing auto-syncs it from GitHub.
+
+**Verified end-to-end 2026-07-21**, via a throwaway harness (`Harness - Test ICP Config Loader`: webhook → Execute Workflow → respond, same pattern as #22's harness; unpublished via `n8n unpublish:workflow` after use, confirmed its webhook now 404s):
+- **Valid-config path**: real `config/icp.default.json` → `{ configOk: true, config: {...}, config_version: "1.0.0-v1" }`, execution shows success in n8n's event log.
+- **Four invalid-config cases**, each confirmed failed via `n8nEventLog.log` (`n8n.workflow.failed`, correct node path through to `Fail Execution - ICP Config Invalid`) and its alert confirmed delivered via Resend's own send log (`GET https://api.resend.com/emails`, subject "Lead Intake Pipeline failure - ICP Config Loader", `last_event: delivered`):
+  1. Corrupt JSON (truncated closing brace) → `Config Parse Failed` branch, `reason_detail` carries the real `JSON.parse` error.
+  2. `scoring_dimensions[0].weight` changed 30→35 (sum 105) → caught by `Validate ICP Config`, `reason_detail`: "scoring_dimensions weights sum to 105, must sum to exactly 100".
+  3. `thresholds.review` changed 48→80 (now above `hot`=72) → caught by `Validate ICP Config`, `reason_detail`: "thresholds must be ordered hot > review > nurture, got hot=72, review=80, nurture=25".
+  4. File moved away entirely → surfaces at the `Extract from File` stage (missing binary data) rather than `Read ICP Config`'s own error output — a minor path difference from the design (readWriteFile's `alwaysOutputData` produces an item without an `error` key when the file is simply absent, so `Config Parse Failed` catches it instead of `Config Read Failed`), but the outcome is identical: loud failure, correct alert, no silent default. Not worth a code change — both failure branches converge on the same `Config Valid?` → `stopAndError` path.
+- Restored the real file after each case and confirmed clean recovery (`configOk: true` again) before moving to the next case, plus one final full-recovery check at the end of the sequence. Full event-log audit of the 7-execution test sequence (valid → 4 breaks, each restored → final valid) showed exactly the expected success/failed/success pattern with zero surprises.
+- Fresh `export:workflow` after removing the in-canvas "NOT YET DEPLOYED" sticky note diffed clean against the committed JSON — only n8n's own bookkeeping fields (`versionId`, `createdAt`, `shared`, etc.) differed, same as every prior workflow issue.
 
 ## Vercel CI/CD connection (#5)
 
