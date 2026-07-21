@@ -120,20 +120,49 @@
     },
     {
       "parameters": {
-        "jsCode": "try {\n  const buffer = await this.helpers.getBinaryDataBuffer(0, 'data');\n  const rules = JSON.parse(buffer.toString('utf-8'));\n  if (!Array.isArray(rules)) throw new Error('fingerprint config is not an array');\n  return [{ json: { configOk: true, rules } }];\n} catch (e) {\n  return [{ json: { configOk: false, rules: [] } }];\n}\n"
+        "operation": "fromJson",
+        "destinationKey": "rules",
+        "options": {}
       },
-      "id": "4efa53a9-4e98-4c4f-b25a-d250f994cd05",
-      "name": "Parse Config",
+      "id": "e2cce08d-49e0-44ec-93ab-51ffe0202ef0",
+      "name": "Extract from File",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        160,
+        -176
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rules = $input.item.json.rules;\nif (!Array.isArray(rules)) {\n  throw new Error('fingerprint config is not an array');\n}\nreturn [{ json: { configOk: true, rules } }];\n"
+      },
+      "id": "d9b014c9-3f31-4678-8a21-26d593b90e2d",
+      "name": "Mark Config OK",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        224,
-        0
+        384,
+        -272
       ]
     },
     {
       "parameters": {
-        "jsCode": "return [{ json: { configOk: false, rules: [] } }];"
+        "jsCode": "return [{ json: { configOk: false, rules: [], reason_detail: $input.item.json.error || 'json parse failed (unknown error)' } }];"
+      },
+      "id": "a909dae6-6bc6-473c-b612-5791d1e726dd",
+      "name": "Config Parse Failed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        576,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const err = $json.error;\nconst detail = (err && (err.message || err)) || 'file read failed (unknown error)';\nreturn [{ json: { configOk: false, rules: [], reason_detail: detail } }];"
       },
       "id": "1934d045-01d0-445b-93d5-e8e356b6207d",
       "name": "Config Read Failed",
@@ -180,7 +209,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const row = $('Check Has Artifacts').item.json;\nconst existing = row.enrichment || {};\nconst enrichment = {\n  ...existing,\n  tech_stack: {\n    status: 'failed',\n    detected: [],\n    method: 'fingerprint',\n    reason: 'config_unreadable'\n  }\n};\n\nreturn [{ json: { id: row.id, enrichment } }];"
+        "jsCode": "const row = $('Check Has Artifacts').item.json;\nconst existing = row.enrichment || {};\nconst enrichment = {\n  ...existing,\n  tech_stack: {\n    status: 'failed',\n    detected: [],\n    method: 'fingerprint',\n    reason: 'config_unreadable',\n    reason_detail: $json.reason_detail || 'unknown'\n  }\n};\n\nreturn [{ json: { id: row.id, enrichment } }];"
       },
       "id": "3fe8af5b-def6-4480-be7e-2efa530fcbda",
       "name": "Build Failed Config Object",
@@ -200,8 +229,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        672,
-        0
+        688,
+        48
       ]
     },
     {
@@ -276,7 +305,7 @@
     },
     {
       "parameters": {
-        "errorMessage": "=Tech Stack Detector: config/tech_fingerprints.json could not be read for lead {{ $json.id }} (check the /config bind mount on the n8n container). tech_stack.status written as failed/config_unreadable; replayable once the mount/file is fixed."
+        "errorMessage": "=Tech Stack Detector: config/tech_fingerprints.json could not be read for lead {{ $json.id }} (check the /config bind mount on the n8n container). Detail: {{ $json.enrichment.tech_stack.reason_detail }}. tech_stack.status written as failed/config_unreadable; replayable once the mount/file is fixed."
       },
       "id": "acd80125-1f01-4509-9127-64c482f4d3fa",
       "name": "Fail Execution - Config Unreadable",
@@ -288,15 +317,7 @@
       ]
     }
   ],
-  "pinData": {
-    "When Executed by Another Workflow": [
-      {
-        "json": {
-          "id": "17bf564d-f81e-4fc5-bc59-c33df8d12b79"
-        }
-      }
-    ]
-  },
+  "pinData": {},
   "connections": {
     "When Executed by Another Workflow": {
       "main": [
@@ -364,7 +385,7 @@
       "main": [
         [
           {
-            "node": "Parse Config",
+            "node": "Extract from File",
             "type": "main",
             "index": 0
           }
@@ -378,7 +399,36 @@
         ]
       ]
     },
-    "Parse Config": {
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Mark Config OK",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Config Parse Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Config OK": {
+      "main": [
+        [
+          {
+            "node": "Config Readable?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config Parse Failed": {
       "main": [
         [
           {
@@ -472,7 +522,7 @@
     "errorWorkflow": "Yl0d71QmNV63K9MI",
     "callerPolicy": "workflowsFromSameOwner"
   },
-  "versionId": "70effcfa-68d2-4c10-becf-d08389982da5",
+  "versionId": "1003021b-2e9e-462b-83ba-8192bf16f68d",
   "meta": {
     "instanceId": "68dc6225d3bd91f509f1622e5bc9ca13d6bb79e6e162b7d2abe02d53fb814dcd"
   },
