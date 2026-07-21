@@ -123,7 +123,7 @@
       "type": "n8n-nodes-base.supabase",
       "typeVersion": 1,
       "position": [
-        -448,
+        672,
         64
       ],
       "credentials": {
@@ -136,21 +136,21 @@
     {
       "parameters": {
         "authentication": "appToken",
-        "email": "={{ $('Supabase - Insert Lead').item.json.email }}",
+        "email": "={{ $('Normalize Lead Record').item.json.email }}",
         "additionalFields": {
-          "companyName": "={{ $('Supabase - Insert Lead').item.json.company }}",
-          "firstName": "={{ $('Supabase - Insert Lead').item.json.name.split(' ')[0] }}",
-          "lastName": "={{ $('Supabase - Insert Lead').item.json.name.split(' ').slice(1).join(' ') }}"
+          "companyName": "={{ $('Normalize Lead Record').item.json.company }}",
+          "firstName": "={{ $('Normalize Lead Record').item.json.name.split(' ')[0] }}",
+          "lastName": "={{ $('Normalize Lead Record').item.json.name.split(' ').slice(1).join(' ') }}"
         },
         "options": {}
       },
       "id": "3a89c7c7-83c8-4025-aa25-3f363ef3ac96",
-      "name": "HubSpot - Create Contact",
+      "name": "HubSpot - Upsert Contact",
       "type": "n8n-nodes-base.hubspot",
       "typeVersion": 2,
       "position": [
-        -224,
-        64
+        1120,
+        0
       ],
       "credentials": {
         "hubspotAppToken": {
@@ -163,7 +163,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ { \"status\": \"ok\", \"id\": $('Supabase - Insert Lead').item.json.id } }}",
+        "responseBody": "={{ { \"status\": \"ok\", \"id\": $('Normalize Lead Record').item.json.id } }}",
         "options": {}
       },
       "id": "e96126ad-58f7-4a18-83d5-bca8ba2cd297",
@@ -171,8 +171,8 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        208,
-        0
+        1568,
+        -80
       ]
     },
     {
@@ -184,7 +184,7 @@
             {
               "keyName": "id",
               "condition": "eq",
-              "keyValue": "={{ $('Supabase - Insert Lead').item.json.id }}"
+              "keyValue": "={{ $('Normalize Lead Record').item.json.id }}"
             }
           ]
         },
@@ -206,8 +206,8 @@
       "type": "n8n-nodes-base.supabase",
       "typeVersion": 1,
       "position": [
-        208,
-        144
+        1568,
+        64
       ],
       "credentials": {
         "supabaseApi": {
@@ -218,15 +218,15 @@
     },
     {
       "parameters": {
-        "errorMessage": "=HubSpot contact creation failed for lead {{ $('Supabase - Insert Lead').item.json.id }} ({{ $('Supabase - Insert Lead').item.json.email }}): {{ $json.error ? $json.error.toString() : JSON.stringify($json) }}. Lead marked status=error in Supabase, replayable after fix."
+        "errorMessage": "=HubSpot contact upsert failed for lead {{ $('Normalize Lead Record').item.json.id }} ({{ $('Normalize Lead Record').item.json.email }}): {{ $json.error ? $json.error.toString() : JSON.stringify($json) }}. Lead marked status=error in Supabase, replayable after fix."
       },
       "id": "87f8ebd1-9b07-46d9-be4d-5d1a0bd88a28",
       "name": "Fail Execution - HubSpot Error",
       "type": "n8n-nodes-base.stopAndError",
       "typeVersion": 1,
       "position": [
-        432,
-        144
+        1792,
+        64
       ]
     },
     {
@@ -237,14 +237,14 @@
         "nodeCredentialType": "hubspotAppToken",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { \"properties\": { \"lead_source\": $('Supabase - Insert Lead').item.json.source } } }}",
+        "jsonBody": "={{ { \"properties\": { \"lead_source\": $('Normalize Lead Record').item.json.source } } }}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -16,
-        0
+        1344,
+        -80
       ],
       "id": "9acc980c-42a0-4a38-a7d4-cbc71d4231ab",
       "name": "HubSpot - Set Lead Source",
@@ -281,8 +281,263 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
+        1344,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.item.json;\nreturn [{\n  json: {\n    ...item,\n    has_domain: !!item.domain\n  }\n}];"
+      },
+      "id": "e3d0f78f-bf8d-482c-86c0-e9cae769104d",
+      "name": "Compute Dedupe Key",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -448,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-has-domain",
+              "leftValue": "={{ $json.has_domain }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8e323835-0b87-4fc6-ba63-eb2a280d086c",
+      "name": "Has Domain?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
         -224,
-        240
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "leads",
+        "returnAll": false,
+        "limit": 1,
+        "orderBy": "updated_at.desc",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "domain",
+              "condition": "eq",
+              "keyValue": "={{ $json.domain }}"
+            }
+          ]
+        }
+      },
+      "id": "d77e3539-c76d-4ff1-b9a5-f3f69cdbc987",
+      "name": "Supabase - Find Lead By Domain",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        0,
+        64
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "4pPsx2sAVgrzJm5n",
+          "name": "Supabase Leads"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "leads",
+        "returnAll": false,
+        "limit": 1,
+        "orderBy": "updated_at.desc",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "email",
+              "condition": "eq",
+              "keyValue": "={{ $json.email }}"
+            }
+          ]
+        }
+      },
+      "id": "b1a12467-370a-4490-b779-9048929311df",
+      "name": "Supabase - Find Lead By Email",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        0,
+        256
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "4pPsx2sAVgrzJm5n",
+          "name": "Supabase Leads"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $('Compute Dedupe Key').item.json;\nconst match = $input.item.json; // {} if no match found (alwaysOutputData zero-result shape)\nconst hasMatch = !!match.id;\n\nlet action, reenrich, existing_id, existing_status;\nlet message = lead.message;\n\nif (!hasMatch) {\n  action = 'insert';\n  reenrich = true;\n} else {\n  action = 'update';\n  existing_id = match.id;\n  existing_status = match.status;\n  const daysSince = (Date.now() - new Date(match.updated_at).getTime()) / 86400000;\n  reenrich = daysSince > 30;\n\n  if (match.message && lead.message && match.message !== lead.message) {\n    message = `${match.message}\\n---\\n${lead.message}`;\n  } else if (!lead.message && match.message) {\n    message = match.message;\n  }\n}\n\nreturn [{\n  json: {\n    name: lead.name,\n    email: lead.email,\n    company: lead.company,\n    domain: lead.domain,\n    source: lead.source,\n    message,\n    submitted_at: lead.submitted_at,\n    action,\n    reenrich,\n    existing_id,\n    existing_status\n  }\n}];"
+      },
+      "id": "52901cd9-446f-43d0-9bcf-0cff90c04670",
+      "name": "Decide Dedupe Action",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-is-insert",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "insert",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1124303e-3df3-4c57-a478-e14ad972da0b",
+      "name": "Insert or Update?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        448,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "leads",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.existing_id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "message",
+              "fieldValue": "={{ $json.message }}"
+            },
+            {
+              "fieldId": "submitted_at",
+              "fieldValue": "={{ $json.submitted_at }}"
+            },
+            {
+              "fieldId": "source",
+              "fieldValue": "={{ $json.source }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "={{ $json.reenrich ? 'raw' : $json.existing_status }}"
+            }
+          ]
+        }
+      },
+      "id": "bcabdc32-5f8c-4a27-917a-6844d6ef5507",
+      "name": "Supabase - Update Lead",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        672,
+        256
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "4pPsx2sAVgrzJm5n",
+          "name": "Supabase Leads"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const decision = $('Decide Dedupe Action').item.json;\nconst id = decision.action === 'insert' ? $input.item.json.id : decision.existing_id;\n\nreturn [{\n  json: {\n    id,\n    name: decision.name,\n    email: decision.email,\n    company: decision.company,\n    domain: decision.domain,\n    source: decision.source,\n    reenrich: decision.reenrich\n  }\n}];"
+      },
+      "id": "04854fb6-45c4-4c0b-bb05-8ea407d8dce8",
+      "name": "Normalize Lead Record",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-reenrich",
+              "leftValue": "={{ $json.reenrich }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5d0d1281-45b3-4309-8214-09e450d064bf",
+      "name": "Should Reenrich?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1120,
+        320
       ]
     }
   ],
@@ -314,7 +569,7 @@
       "main": [
         [
           {
-            "node": "Supabase - Insert Lead",
+            "node": "Compute Dedupe Key",
             "type": "main",
             "index": 0
           }
@@ -332,30 +587,7 @@
       "main": [
         [
           {
-            "node": "HubSpot - Create Contact",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Execute Workflow - Enrichment Orchestrator",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "HubSpot - Create Contact": {
-      "main": [
-        [
-          {
-            "node": "HubSpot - Set Lead Source",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Supabase - Mark Lead Error",
+            "node": "Normalize Lead Record",
             "type": "main",
             "index": 0
           }
@@ -378,6 +610,143 @@
         [
           {
             "node": "Respond 200 - OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Dedupe Key": {
+      "main": [
+        [
+          {
+            "node": "Has Domain?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Domain?": {
+      "main": [
+        [
+          {
+            "node": "Supabase - Find Lead By Domain",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Supabase - Find Lead By Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase - Find Lead By Domain": {
+      "main": [
+        [
+          {
+            "node": "Decide Dedupe Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase - Find Lead By Email": {
+      "main": [
+        [
+          {
+            "node": "Decide Dedupe Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide Dedupe Action": {
+      "main": [
+        [
+          {
+            "node": "Insert or Update?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert or Update?": {
+      "main": [
+        [
+          {
+            "node": "Supabase - Insert Lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Supabase - Update Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase - Update Lead": {
+      "main": [
+        [
+          {
+            "node": "Normalize Lead Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Lead Record": {
+      "main": [
+        [
+          {
+            "node": "HubSpot - Upsert Contact",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Should Reenrich?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Reenrich?": {
+      "main": [
+        [
+          {
+            "node": "Execute Workflow - Enrichment Orchestrator",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "HubSpot - Upsert Contact": {
+      "main": [
+        [
+          {
+            "node": "HubSpot - Set Lead Source",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Supabase - Mark Lead Error",
             "type": "main",
             "index": 0
           }
