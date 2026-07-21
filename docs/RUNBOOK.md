@@ -280,6 +280,41 @@ Same for `lead-intake.json` re-import (id `ql9dgCIrIKvVeukr`) after adding the n
 - **Alert path**: `curl` submission with an unreachable domain and no `company` → `leads.status` stayed `"raw"`, `enriched_at` stayed `null`, `enrichment_duration_ms: 10146` (still recorded), `website.status: "failed"`, `tech_stack.status: "skipped"/"no_html"`, `news.status: "skipped"/"no_company"` — `Enrichment Orchestrator` execution failed with the custom message, exactly one `Lead Intake Pipeline failure - Enrichment Orchestrator` alert fired, confirmed **delivered** via the Resend API's own `/emails` send log (not assumed).
 - All test leads (Supabase rows + HubSpot contacts) deleted after verification.
 
+## Dedupe enforcement (#24)
+
+**Matching logic: domain-priority-with-email-fallback, not `email OR domain`.** The issue text's bullet 1 ("match on email OR (domain when non-null)") read as a flat OR, which contradicts its own bullet 3 (same email, different domain → new lead) and docs/ARCHITECTURE.md #6. Resolved in favor of #6 — see the comment on issue #24 and docs/DECISIONS.md for the full reasoning. Implemented as: match on `domain` when the incoming lead has one (`Supabase - Find Lead By Domain`), fall back to matching on `email` only when domain is null (`Supabase - Find Lead By Email`) — two separate single-condition Supabase `getAll` nodes gated by a `Has Domain?` IF, not one node with a dynamically-expressioned filter column.
+
+**`alwaysOutputData: true` on zero-result Supabase lookups emits `{ json: {} }`, not a passthrough of the input** — confirmed by reading n8n core (`packages/core/src/execution-engine/workflow-execute.ts`: `nodeSuccessData[0] = [{ json: {}, pairedItem }]`). This is required on both `Find Lead By Domain`/`Find Lead By Email` so a genuine "no existing row" result still emits one item instead of silently killing the branch — the third confirmed instance of the #21/#23 "zero output items" gotcha class, this time from a lookup query rather than a sub-workflow call. Because of this shape, `Decide Dedupe Action` never trusts `$json` for the original lead fields after this lookup — it reads them back from `$('Compute Dedupe Key').item.json` by name.
+
+**`leads_set_updated_at` (the trigger from the original #3 migration) blocks backdating `updated_at` for testing, from *any* client, not just the REST API.** It's an unconditional `BEFORE UPDATE ... SET NEW.updated_at = now()` trigger, so a plain `UPDATE leads SET updated_at = ...` gets silently overridden by the trigger regardless of whether it runs via PostgREST or the Supabase SQL Editor. To simulate a >30-day-old row for testing the re-enrich path, disable the trigger, backdate, re-enable, in the SQL Editor:
+```sql
+alter table leads disable trigger leads_set_updated_at;
+update leads set updated_at = now() - interval '31 days' where id = '<lead-id>';
+alter table leads enable trigger leads_set_updated_at;
+```
+`submitted_at` has no such trigger and backdates normally via a plain REST `PATCH`.
+
+**HubSpot already upserts by email — no code change needed for "HubSpot upsert behavior verified consistent."** `HubSpot - Create Contact`'s (renamed `HubSpot - Upsert Contact`) saved JSON never set `"operation"`, meaning it ran on the node's default — and the HubSpot node's contact-resource default is `upsert` ("Create a new contact, or update the current one if it already exists"), confirmed from n8n's `ContactDescription.ts` source. This was already true before #24; the rename just documents it.
+
+**`Lead Intake` wiring after #24**: `Is Valid?`'s true branch now runs `Compute Dedupe Key → Has Domain? → (Find Lead By Domain | Find Lead By Email) → Decide Dedupe Action → Insert or Update? → (Supabase - Insert Lead | Supabase - Update Lead) → Normalize Lead Record → (HubSpot - Upsert Contact | Should Reenrich?)`. `Should Reenrich?`'s false branch is a deliberate dead end (the cost guard — no orchestrator call for a ≤30-day duplicate); its true branch reconnects to the existing `Execute Workflow - Enrichment Orchestrator` node, unchanged (`waitForSubWorkflow: false` preserved). Four existing nodes (`Respond 200 - OK`, `Fail Execution - HubSpot Error`, `Supabase - Mark Lead Error`, `HubSpot - Set Lead Source`) had their `$('Supabase - Insert Lead')` expression references repointed to `$('Normalize Lead Record')`, since the Insert node no longer runs on the update path and a stale reference errors with "no data found for referenced node."
+
+**Deploy (CLI-only path, same as #22/#23):**
+```bash
+scp n8n/workflows/lead-intake.json <vps-host>:/tmp/
+ssh <vps-host> "docker cp /tmp/lead-intake.json n8n-n8n-1:/tmp/lead-intake.json"
+ssh <vps-host> "docker exec n8n-n8n-1 n8n import:workflow --input=/tmp/lead-intake.json"
+ssh <vps-host> "docker exec n8n-n8n-1 n8n publish:workflow --id=ql9dgCIrIKvVeukr"
+ssh <vps-host> "docker compose -f ~/n8n/docker-compose.yml restart n8n"
+```
+Credentials on all six Supabase/HubSpot nodes re-linked automatically (matching ids), confirmed via `export:workflow` immediately after import — same precedent as #22/#23, no manual editor fixes needed this time.
+
+**Verified end-to-end in production (2026-07-21), through the real `Lead Intake` webhook:**
+- **Within-30-days resubmit**: fresh lead → `status: enriched` in ~14s, one Supabase row, one Enrichment Orchestrator execution (confirmed via `n8nEventLog.log` on the VPS — `grep <workflow-id> n8nEventLog.log | grep workflow.started`, no sqlite3 CLI in the container so the event log is the practical way to count executions). Resubmit within a minute, different message → same lead `id` returned, same row (`message` appended as `"first\n---\nsecond"`, `submitted_at` refreshed, `status` untouched at `enriched`), **zero** new orchestrator executions, exactly one HubSpot contact throughout (`crm/v3/objects/contacts/search` by email, `total: 1`).
+- **>30-day resubmit**: backdated the same row's `updated_at` via the disable-trigger SQL above, resubmitted → same lead `id`, same row, message appended a third time, `status` back to `enriched` with a **fresh** `enriched_at`, and a **second** Enrichment Orchestrator execution confirmed in the event log (two `workflow.started` events total for that workflow id, timestamps matching the two submissions).
+- **Job-change edge case** (same email, different domain): resubmitted with a new `domain`/`company` → a **new** lead `id` returned, confirmed as a genuinely separate Supabase row (two rows now share the email, different domains, both independently `enriched`) — but HubSpot still showed exactly one contact (`total: 1`, same `id`, same `createdate`), its `company` property simply overwritten by the later upsert. This is the intentional asymmetry recorded in docs/DECISIONS.md (lead = buying event, contact = person), now confirmed live rather than assumed.
+- Fresh `export:workflow` after all testing diffed clean against the pre-deploy commit — only `versionId` differed (n8n's own bookkeeping), no node/connection drift.
+- All test leads (Supabase rows) and the test HubSpot contact deleted after verification.
+
 ## Vercel CI/CD connection (#5)
 
 **App**: Next.js (TypeScript) app scaffolded in `web/` — a subdirectory, not repo root, since the repo also holds `n8n/`, `supabase/`, `docs/`, etc.
