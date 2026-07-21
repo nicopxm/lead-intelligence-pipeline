@@ -80,6 +80,11 @@ Create an `A` record on the domain: host = subdomain (e.g. `n8n`), answer = serv
 
 **SSH lockout recovery (fail2ban)** — cause: repeated failed auth within `findtime` (10m), e.g. connecting without `-i` so the wrong key gets offered, or guessing usernames. Symptom: connection refused on port 22 (not a slow timeout — the ban drops the packet outright). Fix: Hetzner's out-of-band web console is independent of the SSH-level ban and gets you in regardless — console.hetzner.cloud → the project → this server → **Console** tab → log in there, then `fail2ban-client set sshd unbanip <your-ip>` (get your current IP from `curl -s https://ifconfig.me`). If the console itself won't load from your current network, try from a phone/different network — it's a separate path from the SSH ban entirely. Otherwise it clears on its own after `bantime` (1h). Root cause found 2026-07-21: use the `lip` SSH alias above (or always pass `-i ~/.ssh/lead-intel-pipeline`) — the ban that day was from a session connecting without `-i`, which offered the wrong key on every attempt.
 
+**Console rescue gotcha (found 2026-07-21): the console login prompt needs a local shell password, and this server has none.** "Hardening" above set up SSH-key-only login and disabled `PasswordAuthentication` for sshd — but that setting is sshd-specific and doesn't touch local console (getty/PAM) login, which still prompts for a username+password nobody ever set. Hitting a bare `login:` prompt in the Hetzner console with no working credentials means the console can't actually be used to self-rescue as-is. Two ways to close this gap, either works, pick one and do it while NOT locked out so it's ready next time:
+- **Set a root password now**, via the Hetzner dashboard's server page → "Reset root password" action (not the Console/VNC tab) — generates a one-time password emailed immediately, which then works at the console `login:` prompt. Simple, but is itself a new password-based entry point to remember/rotate.
+- **Whitelist trusted IPs in fail2ban** (`ignoreip` in `/etc/fail2ban/jail.local`'s `[sshd]` or `[DEFAULT]` section, space-separated CIDRs/IPs, then `fail2ban-client reload`) so a mistyped `-i` from a known-good network (home, office) never triggers a ban in the first place — removes the need for console rescue entirely for those networks, at the cost of needing to update the list if the trusted IP changes (dynamic home IP, new location, etc.).
+Neither is done yet — this is a known gap, not a resolved one. Whichever is chosen, update this entry once it's actually in place.
+
 ### Docker
 Installed via the official convenience script (`curl -fsSL https://get.docker.com | sh`), which installs `docker-ce`, `docker-ce-cli`, `containerd.io`, and the `docker-compose-plugin` (i.e. `docker compose`, no separate `docker-compose` binary). The deploy user is added to the `docker` group; Docker daemon is enabled at boot (`systemctl enable docker`).
 
@@ -320,6 +325,34 @@ Credentials on all six Supabase/HubSpot nodes re-linked automatically (matching 
 - **Job-change edge case** (same email, different domain): resubmitted with a new `domain`/`company` → a **new** lead `id` returned, confirmed as a genuinely separate Supabase row (two rows now share the email, different domains, both independently `enriched`) — but HubSpot still showed exactly one contact (`total: 1`, same `id`, same `createdate`), its `company` property simply overwritten by the later upsert. This is the intentional asymmetry recorded in docs/DECISIONS.md (lead = buying event, contact = person), now confirmed live rather than assumed.
 - Fresh `export:workflow` after all testing diffed clean against the pre-deploy commit — only `versionId` differed (n8n's own bookkeeping), no node/connection drift.
 - All test leads (Supabase rows) and the test HubSpot contact deleted after verification.
+
+## ICP Config Loader (#28) — NOT YET DEPLOYED
+
+`n8n/workflows/icp-config-loader.json` — new sub-workflow, built 2026-07-21, **never imported into the running n8n instance**. VPS SSH was fail2ban-locked for the entire session it was built in (see the lockout recovery note above), so it exists only as committed JSON. Carries a Sticky Note reading "NOT YET DEPLOYED" inside the workflow itself as a second reminder — remove that note once verified live.
+
+**What it does**: Execute Workflow Trigger (passthrough) → `Read ICP Config` (Read/Write Files from Disk, `/config/icp.default.json`) → `Extract from File` (fromJson) → `Validate ICP Config` (Code node: checks all required top-level/nested fields present, `scoring_dimensions` weights sum to exactly 100, `thresholds.hot > review > nurture`) → `Config Valid?` IF node. True branch is a deliberate dead end (its output — `{ configOk: true, config, config_version }` — is what a caller like #29 reads back via `$('ICP Config Loader')`, same convention as every other sub-workflow here); false branch (covers read failure, parse failure, or any validation failure) hits `Fail Execution - ICP Config Invalid` (Stop and Error), which fails the execution loudly and fires the shared `Lead Intake - Error Alert` workflow via `settings.errorWorkflow` — mirrors Tech Stack Detector's `config_unreadable` pattern exactly, so an invalid ICP config alerts the same way a broken fingerprint config does, never falling back to a silent default.
+
+**Remaining deploy steps (run once VPS access is restored — use `ssh lip`, not raw IP, see top of file):**
+```bash
+scp n8n/workflows/icp-config-loader.json lip:/tmp/
+ssh lip "docker cp /tmp/icp-config-loader.json n8n-n8n-1:/tmp/icp-config-loader.json"
+ssh lip "docker exec n8n-n8n-1 n8n import:workflow --input=/tmp/icp-config-loader.json"
+ssh lip "docker exec n8n-n8n-1 n8n publish:workflow --id=iCPCfgLoader0001"
+ssh lip "docker compose -f ~/n8n/docker-compose.yml restart n8n"
+```
+Then, same pattern as #21/#26:
+1. Confirm `Lead Intake - Error Alert` is already selected as this workflow's Error Workflow post-import (`settings.errorWorkflow` is in the committed JSON, so this should just round-trip — confirm via `export:workflow`, don't assume).
+2. **Valid-config path**: manually execute the workflow (editor "Execute Workflow" or via a throwaway caller) against the real, committed `config/icp.default.json` — confirm it returns `{ configOk: true, config: {...}, config_version: "1.0.0-v1" }` with no execution failure.
+3. **Invalid-config path** (don't skip this — it's the actual point of #28's validation AC): temporarily break the live file on the VPS in each of these ways, one at a time, re-running after each and reverting before the next:
+   - Corrupt the JSON (e.g. delete a closing brace) → expect `Config Parse Failed` branch, execution fails, alert fires.
+   - Change one `scoring_dimensions[].weight` so they no longer sum to 100 → expect `Validate ICP Config` to catch it (`reason_detail` should say "weights sum to X, must sum to exactly 100"), execution fails, alert fires.
+   - Set `thresholds.review` higher than `thresholds.hot` → expect `Validate ICP Config` to catch the ordering violation, execution fails, alert fires.
+   - Rename/move the file so it can't be read at all → expect `Config Read Failed` branch, execution fails, alert fires.
+   - Restore the real file after each case and confirm a clean re-run recovers (`configOk: true` again) — don't leave the live config broken.
+4. Confirm each alert actually arrived (Resend send log or inbox), not just that the execution shows failed in n8n.
+5. Fresh `export:workflow` afterward, diff against the committed JSON — should be clean except `versionId`.
+6. Remove the "NOT YET DEPLOYED" sticky note from the workflow (in the editor), re-export, commit.
+7. Only then does #28 actually close — update the issue comment with the verification evidence (per-case pass/fail, alert confirmation) and flip its board status to Done.
 
 ## Vercel CI/CD connection (#5)
 

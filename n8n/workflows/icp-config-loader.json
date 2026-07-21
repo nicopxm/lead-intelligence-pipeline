@@ -1,0 +1,168 @@
+{
+  "name": "ICP Config Loader",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## NOT YET DEPLOYED (#28)\nBuilt 2026-07-21, never imported into this n8n instance — VPS SSH was fail2ban-locked for the whole session. See docs/RUNBOOK.md \"ICP Config Loader (#28)\" section for the exact import/publish/verify steps before relying on this workflow, and remove this note once verified live.",
+        "height": 220,
+        "width": 360
+      },
+      "id": "a1b2c3d4-0009-4aaa-8000-000000000009",
+      "name": "Sticky Note - Deploy Pending",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-896, -220]
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "a1b2c3d4-0001-4aaa-8000-000000000001",
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [-896, 160]
+    },
+    {
+      "parameters": {
+        "fileSelector": "/config/icp.default.json",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0002-4aaa-8000-000000000002",
+      "name": "Read ICP Config",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [-672, 160],
+      "alwaysOutputData": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "fromJson",
+        "destinationKey": "config",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0003-4aaa-8000-000000000003",
+      "name": "Extract from File",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [-448, 64],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const err = $json.error;\nconst detail = (err && (err.message || err)) || 'file read failed (unknown error)';\nreturn [{ json: { configOk: false, reason_detail: detail } }];"
+      },
+      "id": "a1b2c3d4-0004-4aaa-8000-000000000004",
+      "name": "Config Read Failed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-448, 320]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { configOk: false, reason_detail: $input.item.json.error || 'json parse failed (unknown error)' } }];"
+      },
+      "id": "a1b2c3d4-0005-4aaa-8000-000000000005",
+      "name": "Config Parse Failed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-224, 160]
+    },
+    {
+      "parameters": {
+        "jsCode": "const config = $json.config;\nconst errors = [];\n\nif (!config || typeof config !== 'object') {\n  errors.push('config is not an object');\n} else {\n  const requiredTop = ['config_version', 'tenant', 'company_identity', 'icp_description', 'scoring_dimensions', 'hard_disqualifiers', 'thresholds', 'email_rules'];\n  for (const key of requiredTop) {\n    if (config[key] === undefined || config[key] === null) errors.push(`missing required field: ${key}`);\n  }\n\n  if (config.company_identity) {\n    for (const key of ['name', 'sender_name', 'value_proposition', 'tone']) {\n      if (!config.company_identity[key]) errors.push(`missing company_identity.${key}`);\n    }\n  }\n\n  if (!Array.isArray(config.scoring_dimensions) || config.scoring_dimensions.length === 0) {\n    errors.push('scoring_dimensions must be a non-empty array');\n  } else {\n    let weightSum = 0;\n    config.scoring_dimensions.forEach((dim, i) => {\n      if (!dim.key) errors.push(`scoring_dimensions[${i}] missing key`);\n      if (typeof dim.weight !== 'number') errors.push(`scoring_dimensions[${i}] (${dim.key || i}) missing numeric weight`);\n      else weightSum += dim.weight;\n      if (!dim.ideal) errors.push(`scoring_dimensions[${i}] (${dim.key || i}) missing ideal`);\n    });\n    if (weightSum !== 100) errors.push(`scoring_dimensions weights sum to ${weightSum}, must sum to exactly 100`);\n  }\n\n  if (!Array.isArray(config.hard_disqualifiers)) {\n    errors.push('hard_disqualifiers must be an array');\n  }\n\n  if (config.thresholds) {\n    const { hot, review, nurture } = config.thresholds;\n    if (typeof hot !== 'number' || typeof review !== 'number' || typeof nurture !== 'number') {\n      errors.push('thresholds.hot/review/nurture must all be numbers');\n    } else if (!(hot > review && review > nurture)) {\n      errors.push(`thresholds must be ordered hot > review > nurture, got hot=${hot}, review=${review}, nurture=${nurture}`);\n    }\n  } else {\n    errors.push('missing thresholds');\n  }\n\n  if (config.email_rules) {\n    for (const key of ['max_words', 'must_reference', 'never', 'cta']) {\n      if (config.email_rules[key] === undefined) errors.push(`missing email_rules.${key}`);\n    }\n  }\n}\n\nif (errors.length > 0) {\n  return [{ json: { configOk: false, reason_detail: errors.join('; ') } }];\n}\n\nreturn [{ json: { configOk: true, config, config_version: config.config_version } }];"
+      },
+      "id": "a1b2c3d4-0006-4aaa-8000-000000000006",
+      "name": "Validate ICP Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-config-ok",
+              "leftValue": "={{ $json.configOk }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0007-4aaa-8000-000000000007",
+      "name": "Config Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [224, 80]
+    },
+    {
+      "parameters": {
+        "errorMessage": "=ICP Config Loader: config/icp.default.json failed validation (check the /config bind mount and file contents on the n8n container). Detail: {{ $json.reason_detail }}. No score was computed — this fails loudly rather than falling back to a silent default config."
+      },
+      "id": "a1b2c3d4-0008-4aaa-8000-000000000008",
+      "name": "Fail Execution - ICP Config Invalid",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [448, 240]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [[{ "node": "Read ICP Config", "type": "main", "index": 0 }]]
+    },
+    "Read ICP Config": {
+      "main": [
+        [{ "node": "Extract from File", "type": "main", "index": 0 }],
+        [{ "node": "Config Read Failed", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [{ "node": "Validate ICP Config", "type": "main", "index": 0 }],
+        [{ "node": "Config Parse Failed", "type": "main", "index": 0 }]
+      ]
+    },
+    "Config Read Failed": {
+      "main": [[{ "node": "Config Valid?", "type": "main", "index": 0 }]]
+    },
+    "Config Parse Failed": {
+      "main": [[{ "node": "Config Valid?", "type": "main", "index": 0 }]]
+    },
+    "Validate ICP Config": {
+      "main": [[{ "node": "Config Valid?", "type": "main", "index": 0 }]]
+    },
+    "Config Valid?": {
+      "main": [
+        [],
+        [{ "node": "Fail Execution - ICP Config Invalid", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "Yl0d71QmNV63K9MI",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "id": "iCPCfgLoader0001",
+  "tags": []
+}
