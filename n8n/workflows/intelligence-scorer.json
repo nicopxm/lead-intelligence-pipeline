@@ -89,7 +89,7 @@
       "onError": "continueRegularOutput",
       "alwaysOutputData": true,
       "credentials": {
-        "httpHeaderAuth": { "id": "PLACEHOLDER_ANTHROPIC_CRED_ID", "name": "Anthropic API Key" }
+        "httpHeaderAuth": { "id": "hfbhfoEtFk7DWP0A", "name": "Anthropic API Key" }
       }
     },
     {
@@ -150,7 +150,7 @@
       "onError": "continueRegularOutput",
       "alwaysOutputData": true,
       "credentials": {
-        "httpHeaderAuth": { "id": "PLACEHOLDER_ANTHROPIC_CRED_ID", "name": "Anthropic API Key" }
+        "httpHeaderAuth": { "id": "hfbhfoEtFk7DWP0A", "name": "Anthropic API Key" }
       }
     },
     {
