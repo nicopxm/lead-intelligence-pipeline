@@ -1,0 +1,314 @@
+{
+  "name": "Intelligence Scorer",
+  "nodes": [
+    {
+      "parameters": { "inputSource": "passthrough" },
+      "id": "b2c3d4e5-0001-4bbb-8000-000000000001",
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [-2000, 160]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "tableId": "leads",
+        "filters": {
+          "conditions": [
+            { "keyName": "id", "keyValue": "={{ $json.id }}" }
+          ]
+        }
+      },
+      "id": "b2c3d4e5-0002-4bbb-8000-000000000002",
+      "name": "Supabase - Get Lead",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [-1776, 160],
+      "credentials": {
+        "supabaseApi": { "id": "4pPsx2sAVgrzJm5n", "name": "Supabase Leads" }
+      }
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "iCPCfgLoader0001",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/iCPCfgLoader0001",
+          "cachedResultName": "ICP Config Loader"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "b2c3d4e5-0003-4bbb-8000-000000000003",
+      "name": "Execute Workflow - ICP Config Loader",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [-1552, 160]
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $('Supabase - Get Lead').item.json;\nconst config = $('Execute Workflow - ICP Config Loader').item.json.config;\n\nconst dims = config.scoring_dimensions.map(d =>\n  `- ${d.key} (weight ${d.weight}): ideal = ${d.ideal}${d.notes ? `. Notes: ${d.notes}` : ''}`\n).join('\\n');\n\nconst disqualifiers = config.hard_disqualifiers.map(d => `- ${d}`).join('\\n');\n\nconst emailRules = `- Max words: ${config.email_rules.max_words}\\n- Must reference: ${config.email_rules.must_reference.join(', ')}\\n- Never mention: ${config.email_rules.never.join(', ')}\\n- CTA: ${config.email_rules.cta}\\n- Tone: ${config.email_rules.tone}`;\n\nconst leadEnrichmentJson = JSON.stringify(lead.enrichment || {}, null, 2);\nconst leadMessage = lead.message || '(no message provided)';\n\nconst systemPrompt = `You are a lead qualification analyst for ${config.company_identity.name}. Score an inbound lead against the Ideal Customer Profile below, then draft a short outreach email if the lead qualifies.\n\n## The business\n${config.company_identity.name}: ${config.company_identity.value_proposition}\n\n## Ideal Customer Profile\n${config.icp_description}\n\n## Scoring dimensions\nScore EACH dimension independently from 0 to 100, where 0 = no evidence or clear mismatch, 100 = ideal. For each, cite the SPECIFIC facts from the lead data you used. If the data is missing or sparse for a dimension, say so and score conservatively — never invent facts not present in the lead data.\n\n${dims}\n\n## Hard disqualifiers\nIf ANY of these is clearly true, set \"disqualified\": true and name which one. Do not soften or explain them away:\n${disqualifiers}\n\n## The lead\nEnrichment data (some fields may be missing — this is normal; score honestly on what exists):\n${leadEnrichmentJson}\n\nInbound message from the lead:\n${leadMessage}\n\n## Email drafting\nOnly if the lead is not disqualified, draft an outreach email following these rules:\n${emailRules}\n- From: ${config.company_identity.sender_name}\nIf disqualified, set draft_email to null.\n\n## Lead intelligence\nAlso surface, at the lead level (not per-dimension):\n- buying_signals: concrete signals this lead may be ready to buy (funding, hiring, growth, explicit intent in their message)\n- objection_risks: likely reasons this lead could stall or not convert (too early-stage, wrong fit on some axis, budget/timing concerns), each grounded in the lead data — do not speculate beyond what's present\n\n## Output\nReturn ONLY valid JSON, no markdown, no preamble, matching this exact schema:\n{\n  \"disqualified\": boolean,\n  \"disqualifier_reason\": string | null,\n  \"dimensions\": {\n    \"company_fit\":   { \"score\": 0-100, \"reasoning\": string, \"evidence\": [string] },\n    \"pain_signals\":  { \"score\": 0-100, \"reasoning\": string, \"evidence\": [string] },\n    \"buying_intent\": { \"score\": 0-100, \"reasoning\": string, \"evidence\": [string] },\n    \"tech_maturity\": { \"score\": 0-100, \"reasoning\": string, \"evidence\": [string] },\n    \"market_timing\": { \"score\": 0-100, \"reasoning\": string, \"evidence\": [string] }\n  },\n  \"buying_signals\": [string],\n  \"objection_risks\": [string],\n  \"company_summary\": string,\n  \"draft_email\": string | null\n}`;\n\nreturn [{ json: { leadId: lead.id, systemPrompt, configVersion: config.config_version, config } }];"
+      },
+      "id": "b2c3d4e5-0004-4bbb-8000-000000000004",
+      "name": "Render Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1328, 160]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-haiku-4-5', max_tokens: 2048, system: $('Render Prompt').item.json.systemPrompt, messages: [{ role: 'user', content: 'Score this lead and return the JSON now.' }] }) }}",
+        "options": {}
+      },
+      "id": "b2c3d4e5-0005-4bbb-8000-000000000005",
+      "name": "Claude API Call (Attempt 1)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-1104, 160],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpHeaderAuth": { "id": "PLACEHOLDER_ANTHROPIC_CRED_ID", "name": "Anthropic API Key" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const resp = $json;\nconst leadId = $('Render Prompt').item.json.leadId;\n\nif (resp.error) {\n  return [{ json: { valid: false, reason: `HTTP error: ${JSON.stringify(resp.error)}`, leadId } }];\n}\n\nconst block = (resp.content || [])[0];\nif (!block || typeof block.text !== 'string') {\n  return [{ json: { valid: false, reason: 'no text content block in response', leadId } }];\n}\n\nlet text = block.text.trim();\ntext = text.replace(/^```(json)?\\n?/, '').replace(/\\n?```$/, '');\n\nlet parsed;\ntry {\n  parsed = JSON.parse(text);\n} catch (e) {\n  return [{ json: { valid: false, reason: `JSON parse failed: ${e.message}`, leadId } }];\n}\n\nconst errors = [];\nif (typeof parsed.disqualified !== 'boolean') errors.push('disqualified must be boolean');\nif (parsed.disqualifier_reason !== null && typeof parsed.disqualifier_reason !== 'string') errors.push('disqualifier_reason must be string or null');\nconst dimKeys = ['company_fit', 'pain_signals', 'buying_intent', 'tech_maturity', 'market_timing'];\nif (!parsed.dimensions || typeof parsed.dimensions !== 'object') {\n  errors.push('dimensions missing');\n} else {\n  for (const key of dimKeys) {\n    const d = parsed.dimensions[key];\n    if (!d) { errors.push(`dimensions.${key} missing`); continue; }\n    if (typeof d.score !== 'number' || d.score < 0 || d.score > 100) errors.push(`dimensions.${key}.score must be 0-100`);\n    if (typeof d.reasoning !== 'string') errors.push(`dimensions.${key}.reasoning must be string`);\n    if (!Array.isArray(d.evidence)) errors.push(`dimensions.${key}.evidence must be array`);\n  }\n}\nif (!Array.isArray(parsed.buying_signals)) errors.push('buying_signals must be array');\nif (!Array.isArray(parsed.objection_risks)) errors.push('objection_risks must be array');\nif (typeof parsed.company_summary !== 'string') errors.push('company_summary must be string');\nif (parsed.draft_email !== null && typeof parsed.draft_email !== 'string') errors.push('draft_email must be string or null');\n\nif (errors.length > 0) {\n  return [{ json: { valid: false, reason: errors.join('; '), leadId } }];\n}\n\nconst usage = resp.usage || {};\nreturn [{\n  json: {\n    valid: true,\n    parsed,\n    leadId,\n    input_tokens: usage.input_tokens || 0,\n    output_tokens: usage.output_tokens || 0\n  }\n}];"
+      },
+      "id": "b2c3d4e5-0006-4bbb-8000-000000000006",
+      "name": "Validate Response (Attempt 1)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-880, 160]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+          "conditions": [
+            {
+              "id": "cond-attempt1-valid",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b2c3d4e5-0007-4bbb-8000-000000000007",
+      "name": "Attempt 1 Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-656, 80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-haiku-4-5', max_tokens: 2048, system: $('Render Prompt').item.json.systemPrompt, messages: [{ role: 'user', content: 'Score this lead and return the JSON now.' }] }) }}",
+        "options": {}
+      },
+      "id": "b2c3d4e5-0008-4bbb-8000-000000000008",
+      "name": "Claude API Call (Attempt 2)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-656, 320],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpHeaderAuth": { "id": "PLACEHOLDER_ANTHROPIC_CRED_ID", "name": "Anthropic API Key" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const resp = $json;\nconst leadId = $('Render Prompt').item.json.leadId;\n\nif (resp.error) {\n  return [{ json: { valid: false, reason: `HTTP error: ${JSON.stringify(resp.error)}`, leadId } }];\n}\n\nconst block = (resp.content || [])[0];\nif (!block || typeof block.text !== 'string') {\n  return [{ json: { valid: false, reason: 'no text content block in response', leadId } }];\n}\n\nlet text = block.text.trim();\ntext = text.replace(/^```(json)?\\n?/, '').replace(/\\n?```$/, '');\n\nlet parsed;\ntry {\n  parsed = JSON.parse(text);\n} catch (e) {\n  return [{ json: { valid: false, reason: `JSON parse failed: ${e.message}`, leadId } }];\n}\n\nconst errors = [];\nif (typeof parsed.disqualified !== 'boolean') errors.push('disqualified must be boolean');\nif (parsed.disqualifier_reason !== null && typeof parsed.disqualifier_reason !== 'string') errors.push('disqualifier_reason must be string or null');\nconst dimKeys = ['company_fit', 'pain_signals', 'buying_intent', 'tech_maturity', 'market_timing'];\nif (!parsed.dimensions || typeof parsed.dimensions !== 'object') {\n  errors.push('dimensions missing');\n} else {\n  for (const key of dimKeys) {\n    const d = parsed.dimensions[key];\n    if (!d) { errors.push(`dimensions.${key} missing`); continue; }\n    if (typeof d.score !== 'number' || d.score < 0 || d.score > 100) errors.push(`dimensions.${key}.score must be 0-100`);\n    if (typeof d.reasoning !== 'string') errors.push(`dimensions.${key}.reasoning must be string`);\n    if (!Array.isArray(d.evidence)) errors.push(`dimensions.${key}.evidence must be array`);\n  }\n}\nif (!Array.isArray(parsed.buying_signals)) errors.push('buying_signals must be array');\nif (!Array.isArray(parsed.objection_risks)) errors.push('objection_risks must be array');\nif (typeof parsed.company_summary !== 'string') errors.push('company_summary must be string');\nif (parsed.draft_email !== null && typeof parsed.draft_email !== 'string') errors.push('draft_email must be string or null');\n\nif (errors.length > 0) {\n  return [{ json: { valid: false, reason: errors.join('; '), leadId } }];\n}\n\nconst usage = resp.usage || {};\nreturn [{\n  json: {\n    valid: true,\n    parsed,\n    leadId,\n    input_tokens: usage.input_tokens || 0,\n    output_tokens: usage.output_tokens || 0\n  }\n}];"
+      },
+      "id": "b2c3d4e5-0009-4bbb-8000-000000000009",
+      "name": "Validate Response (Attempt 2)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-432, 320]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+          "conditions": [
+            {
+              "id": "cond-attempt2-valid",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b2c3d4e5-0010-4bbb-8000-000000000010",
+      "name": "Attempt 2 Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-208, 320]
+    },
+    {
+      "parameters": {
+        "jsCode": "const { parsed, leadId, input_tokens, output_tokens } = $json;\nconst config = $('Render Prompt').item.json.config;\n\nlet weightedTotal = 0;\nfor (const dim of config.scoring_dimensions) {\n  const score = (parsed.dimensions[dim.key] && parsed.dimensions[dim.key].score) || 0;\n  weightedTotal += (score * dim.weight) / 100;\n}\nweightedTotal = Math.round(weightedTotal);\n\nconst icpScore = parsed.disqualified ? Math.min(weightedTotal, 10) : weightedTotal;\n\nconst { hot, review, nurture } = config.thresholds;\nlet tier;\nif (icpScore >= hot) tier = 'hot';\nelse if (icpScore >= review) tier = 'review';\nelse if (icpScore >= nurture) tier = 'nurture';\nelse tier = 'discard';\n\nconst deliverDraft = tier !== 'discard';\n\n// Haiku 4.5 pricing as of 2026-07-22: $1.00/1M input tokens, $5.00/1M output tokens (docs/DECISIONS.md)\nconst costUsd = (input_tokens / 1e6) * 1.00 + (output_tokens / 1e6) * 5.00;\n\nconst intelligence = {\n  disqualified: parsed.disqualified,\n  disqualifier_reason: parsed.disqualifier_reason,\n  dimensions: parsed.dimensions,\n  buying_signals: parsed.buying_signals,\n  objection_risks: parsed.objection_risks,\n  company_summary: parsed.company_summary,\n  draft_email: deliverDraft ? parsed.draft_email : null,\n  icp_score: icpScore,\n  tier,\n  prompt_version: 'lead-scoring-v1',\n  config_version: config.config_version,\n  scored_at: new Date().toISOString(),\n  input_tokens,\n  output_tokens,\n  cost_usd: Math.round(costUsd * 1e6) / 1e6\n};\n\nreturn [{ json: { leadId, intelligence } }];"
+      },
+      "id": "b2c3d4e5-0011-4bbb-8000-000000000011",
+      "name": "Compute Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-432, 80]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "leads",
+        "filters": {
+          "conditions": [
+            { "keyName": "id", "condition": "eq", "keyValue": "={{ $json.leadId }}" }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldId": "status", "fieldValue": "scored" },
+            { "fieldId": "intelligence", "fieldValue": "={{ JSON.stringify($json.intelligence) }}" }
+          ]
+        }
+      },
+      "id": "b2c3d4e5-0012-4bbb-8000-000000000012",
+      "name": "Supabase - Mark Scored",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [-208, 80],
+      "credentials": {
+        "supabaseApi": { "id": "4pPsx2sAVgrzJm5n", "name": "Supabase Leads" }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "leads",
+        "filters": {
+          "conditions": [
+            { "keyName": "id", "condition": "eq", "keyValue": "={{ $('Render Prompt').item.json.leadId }}" }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldId": "status", "fieldValue": "error" }
+          ]
+        }
+      },
+      "id": "b2c3d4e5-0013-4bbb-8000-000000000013",
+      "name": "Dead Letter - Intelligence Failed",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [16, 400],
+      "credentials": {
+        "supabaseApi": { "id": "4pPsx2sAVgrzJm5n", "name": "Supabase Leads" }
+      }
+    },
+    {
+      "parameters": {
+        "errorMessage": "=Intelligence Scorer: lead {{ $('Render Prompt').item.json.leadId }} failed Claude output validation twice in a row (attempt 1: {{ $('Validate Response (Attempt 1)').item.json.reason }}; attempt 2: {{ $json.reason }}). Dead-lettered to status=error, replayable after investigating the prompt/model output."
+      },
+      "id": "b2c3d4e5-0014-4bbb-8000-000000000014",
+      "name": "Fail Execution - Intelligence Invalid",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [240, 400]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [[{ "node": "Supabase - Get Lead", "type": "main", "index": 0 }]]
+    },
+    "Supabase - Get Lead": {
+      "main": [[{ "node": "Execute Workflow - ICP Config Loader", "type": "main", "index": 0 }]]
+    },
+    "Execute Workflow - ICP Config Loader": {
+      "main": [[{ "node": "Render Prompt", "type": "main", "index": 0 }]]
+    },
+    "Render Prompt": {
+      "main": [[{ "node": "Claude API Call (Attempt 1)", "type": "main", "index": 0 }]]
+    },
+    "Claude API Call (Attempt 1)": {
+      "main": [[{ "node": "Validate Response (Attempt 1)", "type": "main", "index": 0 }]]
+    },
+    "Validate Response (Attempt 1)": {
+      "main": [[{ "node": "Attempt 1 Valid?", "type": "main", "index": 0 }]]
+    },
+    "Attempt 1 Valid?": {
+      "main": [
+        [{ "node": "Compute Score", "type": "main", "index": 0 }],
+        [{ "node": "Claude API Call (Attempt 2)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Claude API Call (Attempt 2)": {
+      "main": [[{ "node": "Validate Response (Attempt 2)", "type": "main", "index": 0 }]]
+    },
+    "Validate Response (Attempt 2)": {
+      "main": [[{ "node": "Attempt 2 Valid?", "type": "main", "index": 0 }]]
+    },
+    "Attempt 2 Valid?": {
+      "main": [
+        [{ "node": "Compute Score", "type": "main", "index": 0 }],
+        [{ "node": "Dead Letter - Intelligence Failed", "type": "main", "index": 0 }]
+      ]
+    },
+    "Compute Score": {
+      "main": [[{ "node": "Supabase - Mark Scored", "type": "main", "index": 0 }]]
+    },
+    "Dead Letter - Intelligence Failed": {
+      "main": [[{ "node": "Fail Execution - Intelligence Invalid", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "Yl0d71QmNV63K9MI",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "id": "intelScorer0001a",
+  "tags": []
+}
