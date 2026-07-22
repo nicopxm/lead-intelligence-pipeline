@@ -70,7 +70,7 @@ The ICP is **data, not prompt text**. The intelligence layer loads a JSON config
   "thresholds": {
     "hot": 72,        // instant alert
     "review": 48,     // normal CRM entry
-    "nurture": 25     // below this: log-only, no draft email (saves tokens)
+    "nurture": 25     // below this: log-only — draft is generated but discarded, not delivered/stored (see DECISIONS.md 2026-07-22)
   },
 
   "email_rules": {
@@ -90,5 +90,5 @@ The prompt template has slots: `{{icp_description}}`, `{{scoring_dimensions}}`, 
 
 ## Interview-worthy points
 - **Deterministic aggregation over model-reported totals** (rule 3) — reproducibility and debuggability.
-- **`nurture` threshold gates email drafting** — direct cost lever; don't spend output tokens on leads nobody will contact.
+- **`nurture` threshold gates draft delivery/storage, not generation** — the single structured call always drafts (the model itself nulls the draft only on disqualification); code discards the draft below this threshold rather than persisting or delivering it. Generating only for scores ≥ threshold would require knowing the score before drafting, which needs a second call — see docs/DECISIONS.md 2026-07-22 for why that breaks the one-structured-call architecture.
 - **Config versioning per scored lead** — scores are only meaningful relative to the rubric that produced them.
