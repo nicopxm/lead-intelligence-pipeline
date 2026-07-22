@@ -273,6 +273,33 @@
       "type": "n8n-nodes-base.stopAndError",
       "typeVersion": 1,
       "position": [1024, 288]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "intelScorer0001a",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/intelScorer0001a",
+          "cachedResultName": "Intelligence Scorer"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "a1b1c1d1-0014-4001-8001-000000000014",
+      "name": "Execute Workflow - Intelligence Scorer",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [1024, 64],
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
     }
   ],
   "pinData": {},
@@ -309,6 +336,9 @@
         [{ "node": "Supabase - Mark Enriched", "type": "main", "index": 0 }],
         [{ "node": "Supabase - Record Duration Only", "type": "main", "index": 0 }]
       ]
+    },
+    "Supabase - Mark Enriched": {
+      "main": [[{ "node": "Execute Workflow - Intelligence Scorer", "type": "main", "index": 0 }]]
     },
     "Supabase - Record Duration Only": {
       "main": [[{ "node": "Fail Execution - All Enrichment Failed", "type": "main", "index": 0 }]]
