@@ -71,6 +71,8 @@ gh project item-add 1 --owner nicopxm --url <issue-url>
 
 See CLAUDE.md's Definition of Done — board state is now a required final verification step on every issue, not assumed from automation or a `gh issue close`.
 
+**2026-07-17's fix was not permanent.** During #30 (2026-07-23), 3 fresh issues (#34/#35/#36) all needed a manual Status set, and one of them (#35) needed a full manual `gh project item-add` — it never auto-added at all. Re-ran the same diagnostics: the repo-project link is still intact this time (unlike 2026-07-17), and `Auto-add to project` is still `enabled: true` — so this isn't the same root cause recurring. Two separate things going on instead: `Item added to project` (the workflow that sets a default `Status` on add) has been `enabled: false` since the original fix and was never turned on, meaning every successfully auto-added item has always landed with no `Status` — not a new regression, just a gap the 2026-07-17 fix never closed and nothing had surfaced it until this session started checking every new issue. Separately, #35's complete miss (not added at all, not just missing a Status) has no confirmed cause — could be genuine automation flakiness or just an insufficient wait before manually intervening. Filed as #37, not fixed there — no single-mutation fix exists this time (schema introspection found no mutation to toggle a project workflow's enabled state); fixing `Item added to project` needs the Projects UI, and needs its own throwaway-test-issue verification the same way 2026-07-17's fix did.
+
 ## Hetzner provisioning (#2)
 
 **Server**: Hetzner Cloud CX23 (2 vCPU / 4GB RAM / 40GB disk), Falkenstein (fsn1), Ubuntu 26.04. ~€6.49/mo.
