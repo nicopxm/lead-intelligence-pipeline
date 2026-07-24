@@ -33,6 +33,16 @@ Most of this file's verification steps are one-time — verify once at issue clo
 
 - **Tech Stack Detector config read (#21/#26)**: submit one test lead through the live form monthly, and always after any `docker compose up -d --force-recreate n8n` or n8n version bump — confirm `enrichment.tech_stack.status` comes back `ok` or `skipped`/`no_html`, never `failed`/`config_unreadable`, for a lead with real scraped content. Under a minute; catches a repeat of #26 (which ran silently against every real lead for 3 days before being noticed) early instead of late.
 
+### Tier spot-check protocol
+
+#30 (2026-07-23) ran three spot-check batches before producing one that was actually usable, and even that one (batch 3) was compromised by two mistakes worth not repeating. For the next tier spot-check:
+
+- **Judge blind — always two tables, never one.** Commit a tier per lead (and, ideally, a one-line reason) before any pipeline output — score, tier, dimensions, disqualifier status — is visible. Batch 2 broke this: scores were seen while the batch was being built, before judgment, which anchors the "blind" comparison and makes any resulting agreement number non-evidence. Table A (lead + enrichment summary only) gets published and judged; Table B (scores) only gets revealed after tiers are committed.
+- **Never mix real company names with fabricated message details.** Use fictional company names with realistic details, or real companies with accurate details — not both. Batch 3's flaw: real, recognizable companies with invented pain/size/timeline details in the message let the model's own world knowledge about the real company conflict with the synthetic lead, contaminating both the scoring and the human judge's read of what's "real" about the lead.
+- **Confirm the batch is in-ICP before running it.** Batch 1 (real SaaS brands) and batch 3 (real non-tech B2B companies) both turned out to be testing something other than tier quality — batch 1 tripped a competitor-detection bug, batch 3 was off-ICP entirely under the narrow-scope decision (DECISIONS 2026-07-23: FlowSignal's ICP is B2B SaaS/tech, not any B2B company). Check the leads match the current ICP scope before submitting, not after scoring them.
+- **Verify the disqualifier gate is behaving before running the batch.** A disqualified lead is capped at `icp_score: 10` (or lower) before weighted aggregation ever runs, so it yields no tuning data regardless of how carefully it was constructed — batch 3 lost 7 of 12 leads to the gate, leaving only 3 clean weighted-scoring data points. If #35's disqualifier fix hasn't landed yet, expect a similar loss rate and size the batch accordingly.
+- **Record per lead**: your tier, a one-line reason, and a confident/torn mark (a tier you're sure of and a tier you picked as a coin-flip between two adjacent bands carry different evidentiary weight — don't let them collapse into one blind guess in the tally).
+
 ## GitHub Projects board (#1)
 
 Board: https://github.com/users/nicopxm/projects/1 (user-owned project, number 1). Columns are a single-select `Status` field: `Backlog` / `Sprint` / `In Progress` / `Done`.
@@ -390,6 +400,8 @@ After each import, resource-locator/credential fields don't survive a from-scrat
 - **Unrelated bug discovered, not fixed here**: two test leads using reserved/special-use TLDs (`.test`, `.example` — e.g. `northlightops-demo29.example`, `brightlaneagency29.test`) dead-lettered at the `Lead Intake` level itself, before enrichment ever ran (`leads.enrichment` stayed `{}`) — unrelated to #29's code. Real-TLD non-resolving domains (`.io`, etc.) work fine and give the sparse-enrichment scenario needed for the nurture/discard test leads above. Filed as a backlog issue (not fixed in this session) since it's a `Lead Intake`/HubSpot-level issue, out of scope for the intelligence layer.
 - Fresh `export:workflow` for both `intelligence-scorer.json` and `enrichment-orchestrator.json` diffed clean against the committed JSON — only n8n's own bookkeeping fields (`versionId`, etc.) differed.
 - All 16 test `leads` rows and 14 matching HubSpot contacts deleted after verification (two of the 16 never reached HubSpot — the reserved-TLD cases above failed before contact creation).
+
+**Aggregate cost report (#30, 2026-07-23, 33 test leads across three spot-check batches):** min $0.003810, median $0.009485, max $0.015035, mean $0.009040, 33/33 (100%) under the $0.02/lead target. The $0.007/lead figure above (from #29's single happy-path lead) was a relatively sparse lead and understates the typical case — cost tracks enrichment richness, since a lead with real scraped pages + news items runs roughly double the input tokens of a lead with nothing scraped. The correct claim going forward is **median $0.0095, worst observed $0.015, against a structurally capped input** — the cap being #20's 4,000-char × 3-page scrape limit and #22's 5-item news limit, which bound the maximum possible input by design, not by luck.
 
 ## Vercel CI/CD connection (#5)
 
