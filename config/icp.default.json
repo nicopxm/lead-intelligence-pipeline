@@ -1,58 +1,81 @@
 {
-  "config_version": "1.0.0-v1",
+  "config_version": "1.1.0-v1",
   "tenant": "flowsignal",
+
   "company_identity": {
     "name": "FlowSignal",
     "sender_name": "Wop",
     "value_proposition": "Automated lead enrichment, scoring, and CRM delivery for B2B teams drowning in manual lead ops — set up in days, not quarters.",
     "tone": "direct, warm, no corporate filler, no exclamation marks"
   },
-  "icp_description": "FlowSignal sells to B2B companies (Series A–B or bootstrapped-profitable, 20–200 employees) that have real inbound lead volume but no dedicated RevOps function. The best-fit buyer is visibly straining under manual lead handling — hiring their first ops/SDR roles, recently funded, or growing headcount fast — and already uses a CRM or basic tooling, so they understand the category. Companies over 1000 employees are out of scope: they build in-house or buy enterprise.",
+
+  "icp_description": "FlowSignal sells to B2B software and technology companies (Series A–B or bootstrapped-profitable, 20–200 employees) that have real inbound lead volume but no dedicated RevOps function. The best-fit buyer is visibly straining under manual lead handling — hiring their first ops/SDR roles, recently funded, or growing headcount fast — and already uses a CRM or basic tooling, so they understand the category. SCOPE IS A SCORING SIGNAL, NOT A GATE: non-tech B2B (manufacturing, construction, professional services, logistics, staffing, retail) falls outside the ideal profile and should score low on company_fit, but is never disqualified for it. The 20–200 employee range is the ideal scoring target; the only hard size gate is the >1000 employee disqualifier.",
+
   "scoring_dimensions": [
     {
       "key": "company_fit",
       "weight": 30,
-      "ideal": "B2B; Series A–B or bootstrapped-profitable; 20–200 employees",
-      "notes": "The 'can they actually buy' gate. Misfit here poisons downstream signals. ≤200 is a deliberate SMB/lower-mid scope, not a soft preference."
+      "ideal": "B2B software/technology company; Series A–B or bootstrapped-profitable; 20–200 employees",
+      "notes": "The 'can they actually buy' signal. Score proportionally: a 250-person B2B SaaS company is slightly off-ideal; a 900-person one is far off-ideal; a non-tech B2B company is far off-ideal. NEITHER the size range NOR the tech/SaaS focus is a disqualifier — the only hard size gate is >1000 employees, in hard_disqualifiers. If no size appears in the supplied data, say so and score conservatively rather than guessing."
     },
     {
       "key": "pain_signals",
       "weight": 30,
       "ideal": "Hiring SDR/ops/RevOps roles; 'drowning in leads' or manual-process language; recent funding (scaling pain); fast headcount growth",
-      "notes": "Top differentiator AMONG fitting companies. Equal weight to company_fit is a v1 hypothesis — revisit after #30 human spot-check."
+      "notes": "Top differentiator among fitting companies. Ground primarily in the inbound message. Equal weight to company_fit is a v1 hypothesis — revisit after the human spot-check (#39)."
     },
     {
       "key": "buying_intent",
       "weight": 20,
-      "ideal": "Inbound message states a concrete problem and/or timeline; specificity beats vague curiosity"
+      "ideal": "Inbound message states a concrete problem and/or timeline; specificity beats vague curiosity",
+      "notes": "Ground exclusively in the inbound message text. Do not infer intent from enrichment."
     },
     {
       "key": "tech_maturity",
       "weight": 15,
       "ideal": "Already runs a CRM or marketing/sales tooling — shorter sales cycle, understands the category",
-      "notes": "Fed directly by enrichment tech_stack detection."
+      "notes": "Base primarily on enrichment tech_stack detection. A tool the lead only claims, which enrichment did not detect, is WEAK evidence — score it below a detected tool. If tech_stack is missing, failed, or skipped entirely, score ≤30."
     },
     {
       "key": "market_timing",
       "weight": 5,
       "ideal": "Funding round <6 months old or a recent product launch",
-      "notes": "News-sourced; low weight because news is the weakest-evidence enrichment component (collision noise)."
+      "notes": "News-sourced and lowest weight because news is the weakest-evidence enrichment component: the query is by company name only, so an unrelated same-named company's articles can appear. Treat news as suggestive, never verified. If news is missing, empty, or ambiguous, score ≤20."
     }
   ],
+
   "hard_disqualifiers": [
-    "personal email with no discoverable company",
-    "student or job-seeker inquiry",
-    "obvious competitor",
-    "company larger than 1000 employees"
+    {
+      "id": "personal_email_no_company",
+      "label": "Personal email with no discoverable company",
+      "definition": "The lead used a free-mail address (gmail, outlook, yahoo, icloud, etc.) AND no company entity can be identified anywhere in the supplied data — no company name in the message, no enrichment. If a company is identifiable by any means, this does not apply."
+    },
+    {
+      "id": "student_or_job_seeker",
+      "label": "Student or job-seeker inquiry",
+      "definition": "The message explicitly seeks employment, an internship, or academic/research assistance rather than describing a business problem to solve."
+    },
+    {
+      "id": "obvious_competitor",
+      "label": "Direct competitor",
+      "definition": "The company's primary product is lead enrichment, lead scoring, lead routing, RevOps automation, or CRM delivery/sequencing — the same category FlowSignal sells into. BEING A B2B SAAS OR TECHNOLOGY COMPANY IS NOT SUFFICIENT. Productivity tools, developer tools, design tools, CMS platforms, email clients, photo/media tools, security tools, HR software, fintech, and vertical SaaS are NOT competitors."
+    },
+    {
+      "id": "company_too_large",
+      "label": "Company larger than 1000 employees",
+      "definition": "The supplied data explicitly states an employee count greater than 1000. If no headcount appears anywhere in the supplied data, this NEVER applies — score company_fit conservatively instead. Do not infer headcount from a company's reputation, brand recognition, or industry."
+    }
   ],
+
   "thresholds": {
     "hot": 72,
     "review": 48,
     "nurture": 25
   },
+
   "email_rules": {
     "max_words": 120,
-    "must_reference": ["one specific fact from enrichment"],
+    "must_reference": ["one specific fact from the supplied lead data"],
     "never": ["pricing", "fake urgency", "claiming familiarity we don't have"],
     "cta": "suggest a low-pressure 15-minute call",
     "tone": "direct, warm, no corporate filler"
