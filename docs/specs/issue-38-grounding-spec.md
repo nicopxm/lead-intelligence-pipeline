@@ -137,10 +137,17 @@ You are a lead qualification analyst for {{company_identity.name}}.
    appears in <lead>.
 
 2. SINGLE ENTITY. The enrichment payload and the inbound message describe exactly ONE
-   company. Never split them into two entities. If they conflict — for example a stated
-   headcount that seems inconsistent with the website — note the conflict in your
-   reasoning and score conservatively. Never resolve a conflict by inventing a second
-   company or by preferring outside knowledge.
+   company. Never split them into two entities.
+
+   When the message and the enrichment disagree on a FIRST-PERSON fact about the
+   company — its own headcount, funding stage, growth, or what tools it uses — THE
+   MESSAGE WINS. The person filling out the form is speaking for their own company in
+   the present tense; scraped website copy is of unknown age and may describe a parent
+   org, a franchise network, contractors, or a different scope entirely. Score
+   self-descriptive facts from the message's figure, and note the enrichment's differing
+   figure in your reasoning rather than adopting it. Enrichment remains authoritative for
+   facts the message does NOT state (detected tech stack, recent news). Never resolve a
+   conflict by inventing a second company or by preferring outside knowledge.
 
 3. MISSING DATA IS NORMAL. Enrichment frequently fails or is skipped. When a field is
    missing, say "missing" in your reasoning and score that dimension conservatively.
@@ -245,9 +252,10 @@ Field rules:
 - evidence — every string must be a near-verbatim excerpt from <enrichment> or
   <message>. Never paraphrase into a claim the source does not make.
 - observed_headcount — if an employee count appears anywhere in <lead>, put the number
-  in value and the verbatim source excerpt in source_quote. If none appears, value 0 and
-  source_quote null. Never fill this from outside knowledge — it is the receipt for any
-  size-based disqualification.
+  in value and the verbatim source excerpt in source_quote. If the message and
+  enrichment state DIFFERENT headcounts, use the MESSAGE's figure (per rule 2) and quote
+  the message. If none appears, value 0 and source_quote null. Never fill this from
+  outside knowledge — it is the receipt for any size-based disqualification.
 - disqualifier_id — exactly one `id` from <disqualifiers>, or null. Never free text.
 - reasoning inside disqualification — required whether or not a disqualifier hit.
 - fields_used — the enrichment keys you actually referenced, plus the literal string
@@ -344,10 +352,11 @@ Fixtures already exist as retained Supabase rows — resubmit the same payloads 
 - Raycast, Superhuman, Framer, Sanity, Photoroom → **not** disqualified as competitors
 - Attio, Clearbit → **still** `obvious_competitor`
 
-**Batch 3 — fabricated facts (#36)**
-- Ignite Visibility scored against its stated ~120 employees, not an invented "700+"
+**Batch 3 — fabricated facts AND message-vs-enrichment conflict (#36)**
+- Ignite Visibility scored against its message-stated ~120 employees, NOT the "700+ marketing experts" figure that appears in its own scraped `enrichment.website.pages.about` text. This is a message-vs-enrichment conflict, not a pure hallucination — the 700+ is legitimately in `<lead>`, so the DATA FENCE alone doesn't resolve it; rule 2's message-wins precedence is what must make the model ground on 120. `company_summary` describes one company, never two, and does not disqualify on size.
 - Frontline Source, Anders CPA, Behlen Country → no invented headcounts in reasoning; not disqualified on size
 - **Aerotek and W.W. Grainger no longer hit `company_too_large`** (no headcount in the supplied data) but must still land in `discard` via low dimension scores. *This is the deliberate consequence of forbidding world-knowledge size inference — the outcome is preserved, the shortcut is removed.*
+- **Synthetic conflict case** (construct one, not a retained fixture): a lead whose message states a small headcount (e.g. "we're about 40 people") while its scraped enrichment contains a >1000 figure. The model must score on the message's 40, set `observed_headcount` to 40 (quoting the message), and NOT fire `company_too_large`. This is the case `observed_headcount`'s exact-substring check would otherwise pass wrongly — the >1000 quote is real and in `<lead>`, so only the message-wins rule prevents a false disqualification. If this case disqualifies, rule 2 is not being honoured.
 
 **Two-entity binding (#36 comment)**
 - A lead using a real company's domain with a stated headcount that differs from the real company → scores on the stated figure; `company_summary` describes one company, never two
@@ -383,3 +392,4 @@ DoD per CLAUDE.md: merged, deployed, verified live through the real webhook (not
 4. **Size disqualification requires a headcount present in the supplied data.** World-knowledge size inference is forbidden. Known consequence: large, recognisable companies now reach dimension scoring instead of the gate and land in `discard` by score. Verified by the Aerotek/Grainger regression cases.
 5. Output key order changed so evidence and reasoning are generated before scores and the disqualification verdict comes last — the v1 schema put `disqualified` first, forcing a verdict before any reasoning existed.
 6. Evidence-provenance validation ships log-only in v2 to measure its false-positive rate before enforcement; promotion tracked in a follow-up issue.
+7. **Message-wins precedence for conflicting first-person facts.** When the inbound message and scraped enrichment disagree on a self-descriptive fact (headcount, stage, tooling), the message is authoritative — the lead speaks for their own company in the present tense; scraped copy is of unknown age and scope. Surfaced by the Ignite Visibility fixture, whose own about-page says "700+" while the message says ~120. Distinct from the original #36 (world-knowledge fabrication): here the false-scope figure is legitimately inside the enrichment, so the data fence alone doesn't resolve it. Enrichment stays authoritative for facts the message doesn't state (tech stack, news).
