@@ -148,7 +148,7 @@ docker compose up -d
    - `crm.schemas.contacts.write` — required separately to create/modify contact *property definitions* (schema operations are distinct from object read/write; creating `lead_source`/`icp_score` below fails with a `MISSING_SCOPES` 403 without it).
 4. Copy the key value once shown (HubSpot only displays it once). Store as `HUBSPOT_TOKEN` in `.env` per `.env.example` — server-side only, never committed, never in n8n workflow JSON (use n8n credentials).
 5. **n8n compatibility**: n8n's HubSpot node has three auth options — OAuth 2.0, App Token, API Key (legacy, deprecated by HubSpot). The "App Token" option accepts a Service Key directly (n8n renamed the label to "Service Key" to match HubSpot's terminology; the underlying credential type is unchanged) — no HTTP Request node workaround needed. Service Keys don't support webhooks, but our integration only pushes contacts out to HubSpot, so this doesn't apply.
-6. Custom contact properties created via `POST https://api.hubapi.com/crm/v3/properties/contacts`: `lead_source` (string/text), `icp_score` (number) — the latter unused until Sprint 4 scoring lands. **HubSpot Free's default contacts list view only shows a curated property slice, and column edits to that default view don't persist** — `lead_source`/`icp_score` can look "missing" on a contact even though the data landed correctly (verified via API during #8). For demos/manual verification, use a saved view (e.g. "Pipeline leads": name, email, company, lead_source, icp_score) rather than the default view; a single record's "View all properties" is the fallback if no saved view exists.
+6. Custom contact properties created via `POST https://api.hubapi.com/crm/v3/properties/contacts`: `lead_source` (string/text), `icp_score` (number) — the latter unused until Sprint 4 scoring lands. `company_summary` (string/textarea) added the same way on 2026-07-29 for #40's HubSpot delivery. **HubSpot Free's default contacts list view only shows a curated property slice, and column edits to that default view don't persist** — `lead_source`/`icp_score`/`company_summary` can look "missing" on a contact even though the data landed correctly (verified via API during #8). For demos/manual verification, use a saved view (e.g. "Pipeline leads": name, email, company, lead_source, icp_score, company_summary) rather than the default view; a single record's "View all properties" is the fallback if no saved view exists.
 7. Verified auth end-to-end: created a test contact via `POST /crm/v3/objects/contacts`, confirmed `lead_source` round-tripped correctly, then deleted it via `DELETE /crm/v3/objects/contacts/{id}` (204). Both properties and the Service Key confirmed working.
 
 ## n8n operational notes
@@ -434,6 +434,46 @@ Credentials and the `Execute Workflow - ICP Config Loader` node's workflow-picke
 - All throwaway test rows (13 fresh-insert regression copies, 2 additional Sanity retries, 1 synthetic conflict lead) and the one HubSpot test contact created (`jordan.ellis@ibm.com`) deleted after verification. All 13 retained fixture rows restored to their real domains, v1-scored intelligence untouched.
 
 **Not closed by this work**: #35 stays open on the competitor axis (log-only mitigation only, see docs/DECISIONS.md); two follow-up issues filed (#43 promote the reasoning-vs-definition check to enforcing, #44 consider a config-maintained competitor list). #45 tracks the original evidence-provenance log-only→enforcing promotion from the spec itself.
+
+## HubSpot Delivery (#40)
+
+Writes the Intelligence Scorer's output (`icp_score`, `company_summary`, `draft_email`) to the same HubSpot contact created at intake. Design intent (why `hubspot_contact_id` is persisted rather than looked up, why delivery failures don't revert `status`) lives in docs/DECISIONS.md's 2026-07-29 entries — this section is deploy/verify mechanics.
+
+**New property**: `company_summary` (string/textarea, `groupName: contactinformation`) created via `POST /crm/v3/properties/contacts` on 2026-07-29, same one-time schema-write pattern as #4's `lead_source`/`icp_score` — see "HubSpot Service Key setup + contact verification (#4)" above, now updated to list all three.
+
+**New migration**: `supabase/migrations/20260729150000_add_hubspot_contact_id.sql` adds `leads.hubspot_contact_id` (text, nullable, no uniqueness constraint — see DECISIONS for why). Applied manually via the Supabase SQL Editor (no CLI/DB connection string available locally, same as every prior migration).
+
+**`lead-intake.json` change**: new node `Supabase - Save HubSpot Contact ID` runs immediately after `HubSpot - Upsert Contact` succeeds, writing the response's `vid` back to `leads.hubspot_contact_id`. It sits after the `Insert or Update?` dedupe branches already converge into `Normalize Lead Record`, so this single node covers both the fresh-insert and the dedupe-update path — no per-branch duplication needed. `HubSpot - Set Lead Source`'s URL expression had to be repointed from `{{ $json.vid }}` to `{{ $('HubSpot - Upsert Contact').item.json.vid }}` since the new node now sits between them.
+
+**`intelligence-scorer.json` change**: after the existing `Compute Score → Supabase - Mark Scored`, four new nodes:
+- `HubSpot - Set Score & Summary` (PATCH `/crm/v3/objects/contacts/{{ hubspot_contact_id }}`) — runs for every scored lead regardless of tier.
+- `Draft Email Present?` (IF, boolean-true pattern matching the rest of this file) — true only when `Compute Score`'s `draft_email` isn't `null`; the discard tier already nulls it (#29), so no separate tier check is needed here.
+- `HubSpot - Create Note` (POST `/crm/v3/objects/notes`) — `hs_note_body` = draft email, associated to the contact via `associationTypeId: 202` / `associationCategory: HUBSPOT_DEFINED` (confirmed live against this portal's own `GET /crm/v4/associations/notes/contacts/labels`, not just HubSpot's docs).
+- `Supabase - Mark Delivered` — sets `status: 'delivered'` (the enum value reserved since #3's original migration, unused until now).
+
+**Delivery-failure handling**: both new HubSpot HTTP nodes use `onError: continueErrorOutput` into their own `stopAndError` dead-letter (`Fail Execution - HubSpot Score/Summary Write Failed`, `Fail Execution - HubSpot Note Write Failed`) — neither dead-letter touches `leads.status`, unlike the scoring-failure dead-letter (`Dead Letter - Intelligence Failed`) which sets `status=error`. A delivery failure happens strictly after `Supabase - Mark Scored` already ran, so the row is left at `status=scored` — a different recovery story from a scoring failure (already-trustworthy score data, just needs the HubSpot write retried, not a re-run of the Claude call). Each dead-letter's `errorMessage` states this explicitly, matching the file's existing convention of documenting the recovery path inside the alert text itself.
+
+**Deploy (CLI-only path, same as #38):**
+```bash
+ssh lip "cd /home/deploy/lead-intelligence-pipeline && git pull origin main"
+scp n8n/workflows/lead-intake.json lip:/tmp/
+ssh lip "docker cp /tmp/lead-intake.json n8n-n8n-1:/tmp/lead-intake.json"
+ssh lip "docker exec n8n-n8n-1 n8n import:workflow --input=/tmp/lead-intake.json"
+ssh lip "docker exec n8n-n8n-1 n8n publish:workflow --id=ql9dgCIrIKvVeukr"
+scp n8n/workflows/intelligence-scorer.json lip:/tmp/
+ssh lip "docker cp /tmp/intelligence-scorer.json n8n-n8n-1:/tmp/intelligence-scorer.json"
+ssh lip "docker exec n8n-n8n-1 n8n import:workflow --input=/tmp/intelligence-scorer.json"
+ssh lip "docker exec n8n-n8n-1 n8n publish:workflow --id=intelScorer0001a"
+ssh lip "docker compose -f ~/n8n/docker-compose.yml restart n8n"
+```
+Credentials on every new node (Supabase, both HubSpot Service Key nodes including `HubSpot - Create Note`) re-linked automatically on import (matching-id precedent), confirmed via a post-restart `export:workflow`.
+
+**Verified live through the real webhook, 2026-07-29:**
+- **Happy path**: a fresh 38-person B2B SaaS lead (`northlightmetrics.com`, not a retained fixture, scored fresh under v2) reached `status: delivered`, `icp_score: 90`, `tier: hot`, grounded `company_summary` matching the message's own facts (no fabrication). Confirmed directly against HubSpot: the contact carried `icp_score`, `company_summary`, and `lead_source` correctly, and a note existed with the exact `draft_email` text, correctly associated to the contact.
+- **Dedupe path**: resubmitted the same email+domain (forces `Supabase - Update Lead`, not `Insert`) — same `leads.id` returned, `hubspot_contact_id` still correctly populated with the same HubSpot contact id, confirming the single write-back node covers both paths without duplication.
+- **Forced delivery failure**: submitted a second fresh lead, then — inside the real async gap between intake finishing and the enrichment/scoring chain reaching delivery (confirmed via `status` still `raw` at the time) — corrupted that row's `hubspot_contact_id` to a nonexistent HubSpot id via a direct Supabase PATCH. Result: `HubSpot - Set Score & Summary` 404'd, `Fail Execution - HubSpot Score/Summary Write Failed` fired, and the row landed at `status: scored` (not `error`, not `delivered`) — confirming a delivery failure does not revert scored status. The alert **"Lead Intake Pipeline failure - Intelligence Scorer"** was confirmed **delivered** via Resend's own send log, with body text explicitly reading "this is a delivery failure, not a scoring failure... replayable by re-running HubSpot delivery for this lead, no rescoring needed."
+- Fresh `export:workflow` for both `lead-intake.json` and `intelligence-scorer.json` diffed byte-identical against the committed JSON (node code and connections; only n8n's own bookkeeping fields differed).
+- All test data cleaned up after: 2 `leads` rows, 2 HubSpot contacts, 1 HubSpot note deleted.
 
 ## Vercel CI/CD connection (#5)
 

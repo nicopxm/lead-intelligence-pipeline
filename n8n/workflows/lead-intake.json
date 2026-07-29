@@ -231,8 +231,35 @@
     },
     {
       "parameters": {
+        "operation": "update",
+        "tableId": "leads",
+        "filters": {
+          "conditions": [
+            { "keyName": "id", "condition": "eq", "keyValue": "={{ $('Normalize Lead Record').item.json.id }}" }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldId": "hubspot_contact_id", "fieldValue": "={{ $json.vid }}" }
+          ]
+        }
+      },
+      "id": "c1d2e3f4-1234-4bbb-9000-000000000001",
+      "name": "Supabase - Save HubSpot Contact ID",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1232,
+        -80
+      ],
+      "credentials": {
+        "supabaseApi": { "id": "4pPsx2sAVgrzJm5n", "name": "Supabase Leads" }
+      }
+    },
+    {
+      "parameters": {
         "method": "PATCH",
-        "url": "=https://api.hubapi.com/crm/v3/objects/contacts/{{ $json.vid }}",
+        "url": "=https://api.hubapi.com/crm/v3/objects/contacts/{{ $('HubSpot - Upsert Contact').item.json.vid }}",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "hubspotAppToken",
         "sendBody": true,
@@ -243,7 +270,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        1344,
+        1456,
         -80
       ],
       "id": "9acc980c-42a0-4a38-a7d4-cbc71d4231ab",
@@ -739,7 +766,7 @@
       "main": [
         [
           {
-            "node": "HubSpot - Set Lead Source",
+            "node": "Supabase - Save HubSpot Contact ID",
             "type": "main",
             "index": 0
           }
@@ -747,6 +774,17 @@
         [
           {
             "node": "Supabase - Mark Lead Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase - Save HubSpot Contact ID": {
+      "main": [
+        [
+          {
+            "node": "HubSpot - Set Lead Source",
             "type": "main",
             "index": 0
           }
