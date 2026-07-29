@@ -405,6 +405,36 @@ After each import, resource-locator/credential fields don't survive a from-scrat
 
 **Aggregate cost report (#30, 2026-07-23, 33 test leads across three spot-check batches):** min $0.003810, median $0.009485, max $0.015035, mean $0.009040, 33/33 (100%) under the $0.02/lead target. The $0.007/lead figure above (from #29's single happy-path lead) was a relatively sparse lead and understates the typical case — cost tracks enrichment richness, since a lead with real scraped pages + news items runs roughly double the input tokens of a lead with nothing scraped. The correct claim going forward is **median $0.0095, worst observed $0.015, against a structurally capped input** — the cap being #20's 4,000-char × 3-page scrape limit and #22's 5-item news limit, which bound the maximum possible input by design, not by luck.
 
+## Ground the Scorer (#38)
+
+Implements docs/specs/issue-38-grounding-spec.md against `config/icp.default.json` (bumped to `1.1.0-v1`), `n8n/workflows/icp-config-loader.json` (`Validate ICP Config` node), and `n8n/workflows/intelligence-scorer.json` (`Render Prompt`, `Validate Response (Attempt 1/2)`, `Compute Score`). New prompt is `prompts/lead-scoring.v2.md` (v1 kept in the repo for rollback, no longer read at runtime). Design intent lives in docs/DECISIONS.md's 2026-07-29 entries — this section is deploy/verify mechanics.
+
+**Deploy (CLI-only path, `git pull` on the VPS clone FIRST per the #28 drift finding):**
+```bash
+ssh lip "cd /home/deploy/lead-intelligence-pipeline && git pull origin main"
+scp n8n/workflows/icp-config-loader.json lip:/tmp/
+ssh lip "docker cp /tmp/icp-config-loader.json n8n-n8n-1:/tmp/icp-config-loader.json"
+ssh lip "docker exec n8n-n8n-1 n8n import:workflow --input=/tmp/icp-config-loader.json"
+ssh lip "docker exec n8n-n8n-1 n8n publish:workflow --id=iCPCfgLoader0001"
+scp n8n/workflows/intelligence-scorer.json lip:/tmp/
+ssh lip "docker cp /tmp/intelligence-scorer.json n8n-n8n-1:/tmp/intelligence-scorer.json"
+ssh lip "docker exec n8n-n8n-1 n8n import:workflow --input=/tmp/intelligence-scorer.json"
+ssh lip "docker exec n8n-n8n-1 n8n publish:workflow --id=intelScorer0001a"
+ssh lip "docker compose -f ~/n8n/docker-compose.yml restart n8n"
+```
+Credentials and the `Execute Workflow - ICP Config Loader` node's workflow-picker survived re-import automatically this time (matching-id precedent, confirmed via `export:workflow` immediately after import — no manual re-selection needed, unlike some earlier issues).
+
+**Re-verifying retained fixtures needs a fresh row, not a same-row resubmit.** `leads.updated_at` auto-touches to `now()` on any UPDATE (a DB-level trigger) — including a raw PATCH made purely to backdate the timestamp for testing, so trying to force `Lead Intake`'s 30-day dedupe reenrich window open by backdating `updated_at` silently fails: the trigger overwrites it before the webhook's own dedupe lookup ever reads it, and a resubmission looks successful (200 OK, message appended) while actually skipping re-enrichment/re-scoring entirely — first attempt at this regression run did exactly that with all 13 fixtures before the trigger was diagnosed. Working technique: temporarily rename the retained row's `domain` (e.g. `raycast.com` → `raycast.com.old38regression`) to free the real domain, resubmit the original payload (now hits `insert`, which always sets `reenrich: true`), record results from the fresh row, then restore the retained row's domain and delete the throwaway row. See docs/DECISIONS.md's 2026-07-29 methodological-note entry.
+
+**Verified live through the real webhook, 2026-07-29** (retained batch 1/3 rows from #30, resubmitted per the technique above; one new synthetic case constructed):
+- **Batch 1 — competitor boundary**: Raycast, Superhuman, Framer, Photoroom → correctly not disqualified. Attio, Clearbit → correctly still `obvious_competitor`. **Sanity → disqualified as `obvious_competitor` in 3 of 4 independent real samples** — the exact #35 failure mode still reproducing under v2; see docs/DECISIONS.md and issue #35's comment thread for the full evidence and the log-only mitigation added (does not close #35).
+- **Batch 3 — fabricated facts / message-vs-enrichment conflict**: Frontline Source, Anders CPA, Behlen Country → no invented headcounts, not disqualified on size. **Aerotek, W.W. Grainger → no longer hit `company_too_large`** (no headcount anywhere in supplied data), land in `discard` via low dimension scores (12, 7) — confirmed exactly as predicted, not a regression. **Ignite Visibility → `observed_headcount: {value: 120, source_quote: "Around 120 people"}`**, grounded on the message despite its own scraped about-page stating "700+ marketing experts" — message-wins precedence confirmed working on the fixture that surfaced the need for it.
+- **Synthetic message-vs-enrichment conflict case** (constructed, not a retained fixture, per the spec's regression requirement): lead using `ibm.com` (real "300,000+ employees" in scraped `enrichment.website.pages.about`) with a message stating "a small team of about 40 people." Result: `observed_headcount: {value: 40, source_quote: "We're a small team of about 40 people"}`, not disqualified — confirms message-wins prevents a false `company_too_large` even when the conflicting large figure is genuinely present in `<lead>` (the case the exact-substring check alone cannot catch).
+- Fresh `export:workflow` for both `icp-config-loader.json` and `intelligence-scorer.json` diffed clean against the committed JSON (node code and connections byte-identical; only n8n's own bookkeeping fields differed).
+- All throwaway test rows (13 fresh-insert regression copies, 2 additional Sanity retries, 1 synthetic conflict lead) and the one HubSpot test contact created (`jordan.ellis@ibm.com`) deleted after verification. All 13 retained fixture rows restored to their real domains, v1-scored intelligence untouched.
+
+**Not closed by this work**: #35 stays open on the competitor axis (log-only mitigation only, see docs/DECISIONS.md); two follow-up issues filed (#43 promote the reasoning-vs-definition check to enforcing, #44 consider a config-maintained competitor list). #45 tracks the original evidence-provenance log-only→enforcing promotion from the spec itself.
+
 ## Vercel CI/CD connection (#5)
 
 **App**: Next.js (TypeScript) app scaffolded in `web/` — a subdirectory, not repo root, since the repo also holds `n8n/`, `supabase/`, `docs/`, etc.
