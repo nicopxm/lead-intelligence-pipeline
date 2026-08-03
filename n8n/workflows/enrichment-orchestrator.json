@@ -149,7 +149,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const row = $json;\nconst enrichment = row.enrichment || {};\nconst website = enrichment.website || {};\nconst techStack = enrichment.tech_stack || {};\nconst news = enrichment.news || {};\n\nconst okStatuses = new Set(['ok', 'partial']);\nconst anyOk = [website, techStack, news].some((c) => okStatuses.has(c.status));\n\nconst startedAtMs = $('Record Start Time').item.json.startedAtMs;\nconst durationMs = Date.now() - startedAtMs;\n\nreturn [{\n  json: {\n    id: row.id,\n    anyOk,\n    durationMs\n  }\n}];"
+        "jsCode": "const row = $json;\nconst enrichment = row.enrichment || {};\nconst website = enrichment.website || {};\nconst techStack = enrichment.tech_stack || {};\nconst news = enrichment.news || {};\n\nconst components = [website, techStack, news];\nconst okStatuses = new Set(['ok', 'partial']);\n\n// #34 (DECISIONS 2026-08-03): this gate is a data-sufficiency check, not an\n// error check. 'skipped' means \"nothing to try\" (no domain to scrape, no\n// company to search) — honest, but not enrichment signal — so it blocks\n// scoring exactly like 'failed' does.\nconst anyOk = components.some((c) => okStatuses.has(c.status));\n\n// All three skipped is a data-quality condition on the lead, not a pipeline\n// failure, so it blocks scoring WITHOUT alerting. Any other blocking case\n// (at least one genuine 'failed', or an unexpected/absent status) still\n// alerts — no silent failures.\nconst allSkipped = components.every((c) => c.status === 'skipped');\n\nconst startedAtMs = $('Record Start Time').item.json.startedAtMs;\nconst durationMs = Date.now() - startedAtMs;\n\nreturn [{\n  json: {\n    id: row.id,\n    anyOk,\n    allSkipped,\n    durationMs\n  }\n}];"
       },
       "id": "a1b1c1d1-0009-4001-8001-000000000009",
       "name": "Compute Overall Status",
@@ -266,13 +266,52 @@
     },
     {
       "parameters": {
-        "errorMessage": "=Enrichment Orchestrator: lead {{ $json.id }} finished with no usable enrichment (website/tech_stack/news all came back failed or skipped). leads.status remains 'raw', replayable after investigating the underlying cause."
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-all-skipped",
+              "leftValue": "={{ $('Compute Overall Status').item.json.allSkipped }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1b1c1d1-0015-4001-8001-000000000015",
+      "name": "All Skipped?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1024, 288]
+    },
+    {
+      "parameters": {},
+      "id": "a1b1c1d1-0016-4001-8001-000000000016",
+      "name": "No Op - All Skipped (No Alert)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1248, 208]
+    },
+    {
+      "parameters": {
+        "errorMessage": "=Enrichment Orchestrator: lead {{ $json.id }} finished with no usable enrichment — at least one of website/tech_stack/news came back failed (or returned an unexpected status) and none reached ok/partial. leads.status remains 'raw', replayable after investigating the underlying cause. Note: an all-skipped lead (no domain AND no company) is a data-quality condition, not a failure, and deliberately does not reach this node — see #34."
       },
       "id": "a1b1c1d1-0013-4001-8001-000000000013",
       "name": "Fail Execution - All Enrichment Failed",
       "type": "n8n-nodes-base.stopAndError",
       "typeVersion": 1,
-      "position": [1024, 288]
+      "position": [1248, 368]
     },
     {
       "parameters": {
@@ -341,7 +380,13 @@
       "main": [[{ "node": "Execute Workflow - Intelligence Scorer", "type": "main", "index": 0 }]]
     },
     "Supabase - Record Duration Only": {
-      "main": [[{ "node": "Fail Execution - All Enrichment Failed", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "All Skipped?", "type": "main", "index": 0 }]]
+    },
+    "All Skipped?": {
+      "main": [
+        [{ "node": "No Op - All Skipped (No Alert)", "type": "main", "index": 0 }],
+        [{ "node": "Fail Execution - All Enrichment Failed", "type": "main", "index": 0 }]
+      ]
     }
   },
   "active": true,

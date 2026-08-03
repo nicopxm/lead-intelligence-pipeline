@@ -475,6 +475,28 @@ Credentials on every new node (Supabase, both HubSpot Service Key nodes includin
 - Fresh `export:workflow` for both `lead-intake.json` and `intelligence-scorer.json` diffed byte-identical against the committed JSON (node code and connections; only n8n's own bookkeeping fields differed).
 - All test data cleaned up after: 2 `leads` rows, 2 HubSpot contacts, 1 HubSpot note deleted.
 
+## All-skip enrichment gate (#34)
+
+Fixes the case where a lead with **no domain and no company** produced `skipped` on all three enrichment components, which the old two-way `anyOk` gate routed straight into `Fail Execution - All Enrichment Failed` — alerting on what is a lead data-quality condition, not a pipeline failure.
+
+**Ratified outcome** (docs/DECISIONS.md, 2026-08-03): the gate is a *data-sufficiency* check, not an error check. `skipped` still blocks scoring exactly like `failed` (an empty enrichment record has no grounded evidence to score against), but an **all-skipped** lead must not fire an error alert.
+
+**Component status enum is `{ok, partial, skipped, failed}`** — confirmed across all three sub-workflows before touching the gate, since the AC depends on it. Note `partial` is emitted **only** by `Website Scraper` (`Aggregate Website Status`); `Tech Stack Detector` and `News RSS` emit only `ok`/`skipped`/`failed`.
+
+**Implementation** (`enrichment-orchestrator.json`):
+- `Compute Overall Status` now emits `allSkipped` alongside the unchanged `anyOk`.
+- New `All Skipped?` IF node sits on the false branch, **after** `Supabase - Record Duration Only` (so duration is still recorded either way): true → `No Op - All Skipped (No Alert)`, false → the existing `Fail Execution - All Enrichment Failed`.
+- The IF reads `$('Compute Overall Status').item.json.allSkipped`, **not** `$json.allSkipped` — by that point `$json` is the Supabase update node's output row, which has no such field.
+- `allSkipped` is `every(status === 'skipped')`, so an *absent or unexpected* component status is deliberately **not** all-skipped and still routes to the alert — failing loud is the safe default.
+
+**Verified live through the real webhook, 2026-08-03** (not the editor; live export diffed identical to the repo afterwards):
+- **AC 1 — no domain + no company**: all three components `skipped` (`tech_stack: no_html`, `news: no_company`), landed `status: raw`, `enriched_at` null, `intelligence: {}`, `enrichment_duration_ms` recorded (3346ms). **No alert** — Resend's send log showed no send at all for it. HubSpot contact carried **no** `icp_score`, **no** `company_summary`, and **0** associated notes, confirming no delivery write.
+- **AC 2 — no domain + company present**: `News RSS` returned `ok`, gate passed, lead scored and delivered normally — `status: delivered`, `icp_score: 77`, `tier: hot`, `$0.0106`, draft-email note written to HubSpot and confirmed on the contact.
+- **Guard test — genuine failure still alerts**: unreachable domain + no company gave `website: failed` with the other two `skipped`; landed `status: raw` and fired **exactly one** alert ("Lead Intake Pipeline failure - Enrichment Orchestrator"), confirmed in Resend's send log. This is the no-silent-failures check — the fix suppresses the alert *only* for all-skip, never for a real component failure.
+- All test data cleaned up after: 4 `leads` rows, 4 HubSpot contacts, 1 HubSpot note deleted.
+
+**Testing gotcha — posting directly to the n8n webhook does not derive `domain` from the email.** Domain derivation (including the free-mail exclusion list) lives in the Next.js app at `web/src/lib/lead.ts`, so it runs only for form submissions going through the web app's API route. A raw `curl` to the intake webhook with no `domain` key yields `domain: null` regardless of the email's host — which silently turns an intended "unreachable domain" test into an all-skip test. Cost one wasted verification run here. Set `domain` explicitly in any direct-webhook test payload.
+
 ## Vercel CI/CD connection (#5)
 
 **App**: Next.js (TypeScript) app scaffolded in `web/` — a subdirectory, not repo root, since the repo also holds `n8n/`, `supabase/`, `docs/`, etc.
