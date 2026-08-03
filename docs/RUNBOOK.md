@@ -497,6 +497,34 @@ Fixes the case where a lead with **no domain and no company** produced `skipped`
 
 **Testing gotcha — posting directly to the n8n webhook does not derive `domain` from the email.** Domain derivation (including the free-mail exclusion list) lives in the Next.js app at `web/src/lib/lead.ts`, so it runs only for form submissions going through the web app's API route. A raw `curl` to the intake webhook with no `domain` key yields `domain: null` regardless of the email's host — which silently turns an intended "unreachable domain" test into an all-skip test. Cost one wasted verification run here. Set `domain` explicitly in any direct-webhook test payload.
 
+## Config-maintained competitor list (#44)
+
+Removes `obvious_competitor` from model judgment entirely. The 2026-07-29 name-scrub experiment (docs/DECISIONS.md) found the over-triggering is a pre-textual name-recognition prior that fires before the model reads the definition — no prompt wording reaches it. **List-only, not list-first/model-fallback**, ratified 2026-08-03 (docs/DECISIONS.md): the model gets no vote on this disqualifier at all, for any company. The other three `hard_disqualifiers` (`personal_email_no_company`, `student_or_job_seeker`, `company_too_large`) are unaffected and stay model-judged.
+
+**`config/icp.default.json`** (bumped to `1.2.0-v1`): new top-level `competitor_list` array (`Attio`, `Clearbit`, `Apollo`, `Clay`, `HubSpot`, `Outreach`, `Salesloft`); the `obvious_competitor` object in `hard_disqualifiers` gains `"enforcement": "code_list"` (the id/label/definition stay, so `Validate Response`'s enum check still accepts it as a value the *code* path can legitimately emit).
+
+**`intelligence-scorer.json`** — new branch inserted between `Render Prompt` and `Claude API Call (Attempt 1)`:
+- `Render Prompt` filters `enforcement !== 'code_list'` when building the rendered disqualifier list, so the model's prompt no longer mentions `obvious_competitor` as an option at all (not just discouraged — absent).
+- `Check Competitor List` (Code node): lowercases/trims `lead.company` and checks it against `config.competitor_list` (also lowercased).
+- `Is Competitor?` (IF): true → `Competitor Disqualification` (Code node) synthesizes a `{valid: true, parsed, ...}` object shaped exactly like `Validate Response`'s output — `disqualification.hits_disqualifier: true`, `disqualifier_id: 'obvious_competitor'`, all 5 dimension scores 0 with a "skipped, matched competitor list" reasoning string, `disqualifier_source: 'code_list'` — and feeds directly into `Compute Score`, **skipping the Claude API Call node and both retry attempts entirely**. false → the existing `Claude API Call (Attempt 1)` path, unchanged.
+- `Compute Score` gets one added branch: `codeListDisqualified = parsed.disqualifier_source === 'code_list'` forces `icp_score: 10` directly rather than running the weighted-dimension math (which would otherwise need fabricated non-zero dimension scores to reach the same cap) — this was necessary because `HubSpot - Set Score & Summary` reads `$('Compute Score').item.json.intelligence.icp_score` by node name, so the code-list path must still pass through `Compute Score`, not bypass it. Every other path's weighted aggregation is byte-for-byte unchanged.
+
+**Regression fixture, live-verified through the real webhook 2026-08-03** (reused the same 7 retained fixture rows from #30/#35/#38 via the domain-rename-resubmit technique documented above under "Ground the Scorer"):
+
+| company | result |
+|---|---|
+| Attio | `disqualified: true`, `disqualifier_id: obvious_competitor`, `icp_score: 10`, `cost_usd: 0`, `input_tokens: 0` |
+| Clearbit | same as Attio |
+| Raycast | `disqualified: false`, `icp_score: 75`, `tier: hot` |
+| Superhuman | `disqualified: false`, `icp_score: 24`, `tier: discard` |
+| Framer | `disqualified: false`, `icp_score: 50`, `tier: review` |
+| Sanity | `disqualified: false`, `icp_score: 27`, `tier: nurture` — **the #35 failure case, now scores clean** |
+| Photoroom | `disqualified: false`, `icp_score: 11`, `tier: discard` |
+
+Confirmed directly in `n8nEventLog.log`, grouped by `executionId` (not just inferred from `cost_usd: 0`): Attio's and Clearbit's executions show `Check Competitor List → Is Competitor? → Competitor Disqualification → Compute Score` with **no** `Claude API Call (Attempt 1)` node anywhere in the sequence; all 5 non-competitor executions show `Is Competitor? → Claude API Call (Attempt 1) → Validate Response (Attempt 1) → ...`. Fresh `export:workflow` diffed identical to the committed JSON (nodes, connections, name, settings byte-equal; only n8n's own bookkeeping fields — `versionId`, `activeVersionId`, etc. — differed, same as every prior workflow issue).
+
+**Cleanup**: the 7 fresh throwaway Supabase rows created via the domain-rename-resubmit technique were deleted and the 7 retained fixture rows' domains restored (their `intelligence` — still `config_version: 1.0.0-v1` / `prompt_version: lead-scoring-v1` — was never touched, since the fresh scoring landed on the new rows, not these). The 7 HubSpot contacts these fixtures dedupe-upsert to by email are the same long-lived contacts reused across #29/#30/#35/#38 sessions and were **not** deleted (established retention precedent — RUNBOOK's #38 section, docs/DECISIONS.md 2026-07-23/29); their `icp_score`/`company_summary` properties now reflect this session's run, same as every prior regression session left them reflecting its own run. The 3 new HubSpot notes this run created (Raycast/Framer/Sanity — hot/review/nurture tiers keep `draft_email`) were deleted, since notes are append-only per submission and would otherwise accumulate across sessions.
+
 ## Vercel CI/CD connection (#5)
 
 **App**: Next.js (TypeScript) app scaffolded in `web/` — a subdirectory, not repo root, since the repo also holds `n8n/`, `supabase/`, `docs/`, etc.
