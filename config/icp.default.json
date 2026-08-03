@@ -1,5 +1,5 @@
 {
-  "config_version": "1.1.0-v1",
+  "config_version": "1.2.0-v1",
   "tenant": "flowsignal",
 
   "company_identity": {
@@ -58,7 +58,8 @@
     {
       "id": "obvious_competitor",
       "label": "Direct competitor",
-      "definition": "The company's primary product is lead enrichment, lead scoring, lead routing, RevOps automation, or CRM delivery/sequencing — the same category FlowSignal sells into. BEING A B2B SAAS OR TECHNOLOGY COMPANY IS NOT SUFFICIENT. Productivity tools, developer tools, design tools, CMS platforms, email clients, photo/media tools, security tools, HR software, fintech, and vertical SaaS are NOT competitors."
+      "definition": "The company's primary product is lead enrichment, lead scoring, lead routing, RevOps automation, or CRM delivery/sequencing — the same category FlowSignal sells into. BEING A B2B SAAS OR TECHNOLOGY COMPANY IS NOT SUFFICIENT. Productivity tools, developer tools, design tools, CMS platforms, email clients, photo/media tools, security tools, HR software, fintech, and vertical SaaS are NOT competitors.",
+      "enforcement": "code_list"
     },
     {
       "id": "company_too_large",
@@ -66,6 +67,8 @@
       "definition": "The supplied data explicitly states an employee count greater than 1000. If no headcount appears anywhere in the supplied data, this NEVER applies — score company_fit conservatively instead. Do not infer headcount from a company's reputation, brand recognition, or industry."
     }
   ],
+
+  "competitor_list": ["Attio", "Clearbit", "Apollo", "Clay", "HubSpot", "Outreach", "Salesloft"],
 
   "thresholds": {
     "hot": 72,
