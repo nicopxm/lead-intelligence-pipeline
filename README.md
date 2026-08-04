@@ -68,15 +68,15 @@ Red borders are dead-letter and alert paths — every one pages me, none fail si
 
 ## How it works
 
-A lead starts at a Next.js form, or any webhook that can POST the same shape. n8n picks it up, checks Supabase for a duplicate by domain, falling back to email, and writes the row — a new insert or an update, never a duplicate. The form gets its 200 back in a few seconds regardless of what happens next; enrichment kicks off in the background and never blocks the response.
+A lead starts at a Next.js form, or any webhook posting the same shape. n8n checks Supabase for a duplicate by domain (falling back to email) and writes the row, insert or update. The form gets its 200 back in seconds; enrichment runs in the background and never blocks it.
 
-From there, an n8n sub-workflow scrapes the company's homepage, about, and pricing pages, fingerprints their tech stack from what's on those pages, and pulls the last 90 days of news by company name. Real websites fail constantly, timeouts, JS-only pages, robots.txt blocks, so each step reports its own status instead of taking the whole lead down with it.
+An n8n sub-workflow scrapes the company's homepage, about, and pricing pages, fingerprints their tech stack, and pulls the last 90 days of news by company name. Real websites fail constantly, so each step reports its own status without taking the whole lead down.
 
-Once enrichment settles, the lead goes to the Intelligence Scorer: one call to Claude Haiku, given the lead's message plus everything enrichment found, comes back with a score across five weighted dimensions, evidence for each one, buying signals, objection risks, and a draft outreach email. Code, not the model, does the weighted math, applies a disqualifier cap if the lead trips one, and assigns a tier.
+One Claude Haiku call, given the message plus everything enrichment found, returns a score across five weighted dimensions with evidence, buying signals, objection risks, and a draft email. Code, not the model, does the weighted math, applies a disqualifier cap, and assigns a tier.
 
-From there it's a write to HubSpot: score and a company summary land on the contact, the draft email attaches as a note if the lead cleared the discard tier, and a hot lead fires a Resend alert on top of the normal delivery. Every failure point along the way, a bad payload, an enrichment wipeout, a malformed model response, a failed HubSpot write, dead-letters the lead and sends a Resend alert instead of failing silently.
+From there it's a write to HubSpot: score and summary on the contact, the draft attached as a note if the lead cleared discard, a Resend alert if it's hot. Every failure point, bad payload, enrichment wipeout, malformed response, failed write, dead-letters the lead and alerts instead of failing silently.
 
-The ICP itself lives in a JSON config file, not in code: scoring dimensions, weights, thresholds, disqualifiers, even the sender's name and tone. Onboarding a second client means writing a new config file, not touching the pipeline.
+The ICP lives in a JSON config file, not code: dimensions, weights, thresholds, disqualifiers, even sender identity. A second client means a new config file, not a rebuild.
 
 ## ICP scoring
 
@@ -90,31 +90,31 @@ Five dimensions, weighted:
 | Tech maturity | 15 | Detected tech stack, not a claimed one |
 | Market timing | 5 | Recent news, the weakest evidence, weighted accordingly |
 
-Four hard disqualifiers sit on top of the weighted score, not inside it: a personal email with no discoverable company, a student or job-seeker inquiry, a direct competitor, and headcount over 1,000. Three of those are model judgment against a strict written definition, checked at score time. The fourth isn't. Competitor status is a checked list in code: Attio, Clearbit, Apollo, Clay, HubSpot, Outreach, Salesloft. I ran a controlled experiment and found the model can't be trusted with that call — real, recognizable brand names got disqualified as competitors 60% of the time, and the same lead with the name scrubbed out dropped to 17%. That's a name-recognition bias firing before the model reads the definition, not a wording problem, and no amount of prompt tuning reaches it. A short list in config does.
+Four hard disqualifiers sit on top of the weighted score, not inside it: a personal email with no discoverable company, a student or job-seeker inquiry, a direct competitor, and headcount over 1,000. Three are model judgment against a written definition. The fourth isn't: competitor status is a checked list in code (Attio, Clearbit, Apollo, Clay, HubSpot, Outreach, Salesloft). I ran a controlled experiment and found the model can't be trusted with that call — real, recognizable brand names got disqualified as competitors 60% of the time, dropping to 17% with the name scrubbed out. That's a name-recognition bias firing before the model reads the definition, and no amount of prompt tuning reaches it.
 
-The other design call worth explaining: the model drafts an email for every lead, even ones that end up disqualified or scored too low to send. Code decides after scoring whether that draft ships. I could have told the model to skip drafting for bad leads and saved a few hundred tokens a call. I didn't, because that couples two separate decisions, should I write to this lead and is this lead worth talking to, and coupling them meant an earlier prompt version silently threw away leads that a wrongly-tripped disqualifier had misjudged. Split the two, and fixing the disqualifier recovers those leads for free, with zero change to how drafting works.
+The model also drafts an email for every lead, even disqualified or low-scored ones, and code decides after scoring whether that draft ships. I could have told the model to skip drafting for bad leads and saved tokens. I didn't: that couples two separate decisions, should I write to this lead and is this lead worth talking to, and an earlier prompt version silently threw away leads a wrongly-tripped disqualifier had misjudged. Splitting the two means fixing the disqualifier recovers those leads for free.
 
 ## Cost model
 
-A lead costs $0.0141 to $0.0170 to score under the current prompt, comfortably under the $0.02 target I set at the start. That's one Claude Haiku call per lead; a second attempt only fires if the first response fails schema validation, which is rare.
+A lead costs $0.0141 to $0.0170 to score under the current prompt, comfortably under the $0.02 target. That's one Claude Haiku call; a second attempt only fires if the first fails schema validation, which is rare.
 
-That range isn't open-ended by luck. Enrichment input is capped at 4,000 characters per scraped page, three pages max, and news is capped at the 5 most recent items. However verbose or sparse a target site is, the prompt has a hard ceiling: cost tracks enrichment richness, not model verbosity.
+That range isn't open-ended by luck: enrichment is capped at 4,000 characters per page, three pages max, and news at the 5 most recent items. Cost tracks enrichment richness, not model verbosity.
 
-The prompt went through a rewrite mid-project (v1 → v2) to fix a grounding bug: the model was asserting facts, like headcounts, that weren't anywhere in the actual lead data. Grounding every score in evidence and requiring a source quote for size claims raised cost 1.37x on the same five test leads, almost entirely in output tokens, since v2 also drafts for leads v1 used to silently discard before ever scoring them. Still well under budget. Full per-lead numbers and methodology in [docs/COST-ANALYSIS.md](docs/COST-ANALYSIS.md).
+A prompt rewrite mid-project (v1 → v2) fixed a grounding bug: the model was asserting facts, like headcounts, that weren't in the lead data. Grounding every score in evidence and requiring a source quote for size claims raised cost 1.37x on the same five test leads, almost entirely in output tokens, since v2 also drafts for leads v1 used to silently discard. Still well under budget. Full numbers in [docs/COST-ANALYSIS.md](docs/COST-ANALYSIS.md).
 
-Cost isn't the whole story. The same pipeline that scores a lead for under two cents also gets it from form submit to a live HubSpot contact in about 34 seconds, well inside the 90-second target.
+The same pipeline that scores a lead for under two cents also gets it from form submit to a live HubSpot contact in about 34 seconds, well inside the 90-second target.
 
 ## Key decisions and tradeoffs
 
-**Claude Haiku over Sonnet.** One structured call per lead, every time, so cost had to be predictable at volume. Haiku scores the same five dimensions under the same grounding rules for a fraction of Sonnet's price, and lead scoring doesn't need frontier reasoning, it needs consistent extraction against a fixed rubric. Predictable latency mattered too: a 34-second budget doesn't have room for a model that occasionally thinks longer.
+**Claude Haiku over Sonnet.** Cost had to be predictable at volume, one call per lead, every time. Haiku scores the same five dimensions under the same grounding rules for a fraction of Sonnet's price, and scoring needs consistent extraction against a fixed rubric, not frontier reasoning. A 34-second budget has no room for a model that occasionally thinks longer.
 
-**n8n over Zapier or Make.** Priced per workflow execution, not per task, which matters at any real lead volume. It also meant building and debugging real orchestration logic, sub-workflows, retries, dead-letter branches, fire-and-forget execution, instead of chaining prebuilt steps. That's closer to what a RevOps engineering role actually looks like day to day.
+**n8n over Zapier or Make.** Priced per execution, not per task. It also meant building real orchestration, sub-workflows, retries, dead-letters, instead of chaining prebuilt steps, closer to what RevOps engineering actually looks like.
 
-**Config-as-data, not code.** The entire ICP, scoring dimensions, weights, thresholds, disqualifiers, sender identity, lives in one JSON file, validated on load and never silently defaulted. Onboarding a second client is writing a new config, not touching the scoring logic itself. Routine tuning, a weight, a threshold, a new disqualifier reason, is a JSON edit and nothing else. It's a bet made before there's a second client to prove it against; the weights themselves are still an unvalidated v1 hypothesis, since the human spot-check meant to tune them against real outcomes got deferred and never actually completed.
+**Config-as-data, not code.** The entire ICP lives in one JSON file, validated on load, never silently defaulted. A second client is a new config, not touched scoring logic. The weights are still an unvalidated v1 hypothesis, though: the spot-check meant to tune them against real outcomes got deferred and never completed.
 
-**The competitor name-prior experiment.** Covered above under ICP scoring, but it's worth calling out as a decision on its own: when a bug looks like a prompt problem, the fix isn't always a better prompt. I ran a controlled experiment, real name against a scrubbed one, before writing a single line of new prompt, because guessing at the mechanism would have meant iterating on wording that could never fix it.
+**The competitor name-prior experiment.** Covered above under ICP scoring, worth flagging on its own: when a bug looks like a prompt problem, the fix isn't always a better prompt. I ran the experiment before writing a line of new prompt.
 
-**Dead-letter without reverting status.** A delivery failure after a lead is already scored doesn't roll the lead back to a redo state. It dead-letters delivery specifically, alerts, and leaves the trustworthy score in place, because a scoring failure and a delivery failure mean different things: one says redo the Claude call, the other says the data was fine, just retry the write. Conflating them would make a HubSpot outage look like a broken score.
+**Dead-letter without reverting status.** A delivery failure after a lead is already scored doesn't roll it back to a redo state. It dead-letters delivery and leaves the score in place, since a scoring failure and a delivery failure mean different things, and conflating them would make a HubSpot outage look like a broken score.
 
 ## Tech stack
 
