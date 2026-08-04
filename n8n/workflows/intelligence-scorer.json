@@ -573,6 +573,93 @@
         -1104,
         400
       ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-hot-lead",
+              "leftValue": "={{ $('Compute Score').item.json.intelligence.tier === 'hot' }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c8d600c9-5f84-47ea-8ecc-76b30559adb0",
+      "name": "Hot Lead?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        912,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $('Supabase - Get Lead').item.json;\nconst intel = $('Compute Score').item.json.intelligence;\nconst config = $('Render Prompt').item.json.config;\n\nconst contactUrl = `https://app.hubspot.com/contacts/${config.company_identity.hubspot_portal_id}/record/0-1/${lead.hubspot_contact_id}`;\n\nconst draftLines = (intel.draft_email || '').split('\\n').map(l => l.trim()).filter(Boolean);\nconst draftPreview = draftLines.length > 0 ? draftLines[0] : '(no draft email)';\n\nconst subject = `Hot lead: ${lead.company || lead.name} (score ${intel.icp_score})`;\n\nconst html = `<p><b>${lead.name}</b> (${lead.email}) at <b>${lead.company || 'unknown company'}</b> scored <b>${intel.icp_score}</b> (tier hot).</p>` +\n  `<p>HubSpot contact: <a href=\"${contactUrl}\">${contactUrl}</a></p>` +\n  `<p>Draft email preview: ${draftPreview}</p>`;\n\nreturn [{ json: { subject, html } }];"
+      },
+      "id": "804c1825-6cb7-4e04-8ab6-ab5f82d63a1a",
+      "name": "Render Hot Alert Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1136,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.resend.com/emails",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ from: 'Lead Intake Pipeline <onboarding@resend.dev>', to: ['juan.avila619@gmail.com'], subject: $json.subject, html: $json.html }) }}",
+        "options": {}
+      },
+      "id": "e180dbaf-2efe-4d5f-8ee5-eab4f9013408",
+      "name": "Resend - Send Hot Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1360,
+        -240
+      ],
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "kdGfVybKo52HoDE6",
+          "name": "Resend API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "errorMessage": "=Intelligence Scorer: hot-lead alert send failed for lead {{ $('Render Prompt').item.json.leadId }}: {{ $json.error ? $json.error.toString() : JSON.stringify($json) }}. Lead is already delivered with a trustworthy score in HubSpot \u2014 this is a notification failure only, not a scoring or delivery failure; lead remains status=delivered (not reverted), replayable by re-sending the hot-lead alert for this lead, no rescoring or re-delivery needed."
+      },
+      "id": "64c486cb-3044-4b89-bae5-31985257528a",
+      "name": "Fail Execution - Hot Alert Failed",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        1584,
+        -160
+      ]
     }
   ],
   "pinData": {},
@@ -822,6 +909,52 @@
         [
           {
             "node": "Compute Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase - Mark Delivered": {
+      "main": [
+        [
+          {
+            "node": "Hot Lead?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hot Lead?": {
+      "main": [
+        [
+          {
+            "node": "Render Hot Alert Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Render Hot Alert Email": {
+      "main": [
+        [
+          {
+            "node": "Resend - Send Hot Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resend - Send Hot Alert": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Fail Execution - Hot Alert Failed",
             "type": "main",
             "index": 0
           }

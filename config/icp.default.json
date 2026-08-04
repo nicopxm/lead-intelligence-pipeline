@@ -1,12 +1,13 @@
 {
-  "config_version": "1.2.0-v1",
+  "config_version": "1.3.0-v1",
   "tenant": "flowsignal",
 
   "company_identity": {
     "name": "FlowSignal",
     "sender_name": "Wop",
     "value_proposition": "Automated lead enrichment, scoring, and CRM delivery for B2B teams drowning in manual lead ops — set up in days, not quarters.",
-    "tone": "direct, warm, no corporate filler, no exclamation marks"
+    "tone": "direct, warm, no corporate filler, no exclamation marks",
+    "hubspot_portal_id": "51694730"
   },
 
   "icp_description": "FlowSignal sells to B2B software and technology companies (Series A–B or bootstrapped-profitable, 20–200 employees) that have real inbound lead volume but no dedicated RevOps function. The best-fit buyer is visibly straining under manual lead handling — hiring their first ops/SDR roles, recently funded, or growing headcount fast — and already uses a CRM or basic tooling, so they understand the category. SCOPE IS A SCORING SIGNAL, NOT A GATE: non-tech B2B (manufacturing, construction, professional services, logistics, staffing, retail) falls outside the ideal profile and should score low on company_fit, but is never disqualified for it. The 20–200 employee range is the ideal scoring target; the only hard size gate is the >1000 employee disqualifier.",
