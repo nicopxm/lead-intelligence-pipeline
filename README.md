@@ -77,3 +77,19 @@ Once enrichment settles, the lead goes to the Intelligence Scorer: one call to C
 From there it's a write to HubSpot: score and a company summary land on the contact, the draft email attaches as a note if the lead cleared the discard tier, and a hot lead fires a Resend alert on top of the normal delivery. Every failure point along the way, a bad payload, an enrichment wipeout, a malformed model response, a failed HubSpot write, dead-letters the lead and sends a Resend alert instead of failing silently.
 
 The ICP itself lives in a JSON config file, not in code: scoring dimensions, weights, thresholds, disqualifiers, even the sender's name and tone. Onboarding a second client means writing a new config file, not touching the pipeline.
+
+## ICP scoring
+
+Five dimensions, weighted:
+
+| Dimension | Weight | Grounded in |
+|---|---|---|
+| Company fit | 30 | Company size, B2B software/tech category |
+| Pain signals | 30 | The lead's own message: hiring signals, manual-process language, recent funding |
+| Buying intent | 20 | The message only, never enrichment |
+| Tech maturity | 15 | Detected tech stack, not a claimed one |
+| Market timing | 5 | Recent news, the weakest evidence, weighted accordingly |
+
+Four hard disqualifiers sit on top of the weighted score, not inside it: a personal email with no discoverable company, a student or job-seeker inquiry, a direct competitor, and headcount over 1,000. Three of those are model judgment against a strict written definition, checked at score time. The fourth isn't. Competitor status is a checked list in code: Attio, Clearbit, Apollo, Clay, HubSpot, Outreach, Salesloft. I ran a controlled experiment and found the model can't be trusted with that call — real, recognizable brand names got disqualified as competitors 60% of the time, and the same lead with the name scrubbed out dropped to 17%. That's a name-recognition bias firing before the model reads the definition, not a wording problem, and no amount of prompt tuning reaches it. A short list in config does.
+
+The other design call worth explaining: the model drafts an email for every lead, even ones that end up disqualified or scored too low to send. Code decides after scoring whether that draft ships. I could have told the model to skip drafting for bad leads and saved a few hundred tokens a call. I didn't, because that couples two separate decisions, should I write to this lead and is this lead worth talking to, and coupling them meant an earlier prompt version silently threw away leads that a wrongly-tripped disqualifier had misjudged. Split the two, and fixing the disqualifier recovers those leads for free, with zero change to how drafting works.
