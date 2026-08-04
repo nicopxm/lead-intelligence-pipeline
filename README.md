@@ -65,3 +65,15 @@ flowchart TD
 ```
 
 Red borders are dead-letter and alert paths — every one pages me, none fail silently. Green is the one success-path alert, a hot lead, deliberately not wired through error handling since a hot lead isn't a failure.
+
+## How it works
+
+A lead starts at a Next.js form, or any webhook that can POST the same shape. n8n picks it up, checks Supabase for a duplicate by domain, falling back to email, and writes the row — a new insert or an update, never a duplicate. The form gets its 200 back in a few seconds regardless of what happens next; enrichment kicks off in the background and never blocks the response.
+
+From there, an n8n sub-workflow scrapes the company's homepage, about, and pricing pages, fingerprints their tech stack from what's on those pages, and pulls the last 90 days of news by company name. Real websites fail constantly, timeouts, JS-only pages, robots.txt blocks, so each step reports its own status instead of taking the whole lead down with it.
+
+Once enrichment settles, the lead goes to the Intelligence Scorer: one call to Claude Haiku, given the lead's message plus everything enrichment found, comes back with a score across five weighted dimensions, evidence for each one, buying signals, objection risks, and a draft outreach email. Code, not the model, does the weighted math, applies a disqualifier cap if the lead trips one, and assigns a tier.
+
+From there it's a write to HubSpot: score and a company summary land on the contact, the draft email attaches as a note if the lead cleared the discard tier, and a hot lead fires a Resend alert on top of the normal delivery. Every failure point along the way, a bad payload, an enrichment wipeout, a malformed model response, a failed HubSpot write, dead-letters the lead and sends a Resend alert instead of failing silently.
+
+The ICP itself lives in a JSON config file, not in code: scoring dimensions, weights, thresholds, disqualifiers, even the sender's name and tone. Onboarding a second client means writing a new config file, not touching the pipeline.
