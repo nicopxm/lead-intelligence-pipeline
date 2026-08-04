@@ -115,3 +115,13 @@ Cost isn't the whole story. The same pipeline that scores a lead for under two c
 **The competitor name-prior experiment.** Covered above under ICP scoring, but it's worth calling out as a decision on its own: when a bug looks like a prompt problem, the fix isn't always a better prompt. I ran a controlled experiment, real name against a scrubbed one, before writing a single line of new prompt, because guessing at the mechanism would have meant iterating on wording that could never fix it.
 
 **Dead-letter without reverting status.** A delivery failure after a lead is already scored doesn't roll the lead back to a redo state. It dead-letters delivery specifically, alerts, and leaves the trustworthy score in place, because a scoring failure and a delivery failure mean different things: one says redo the Claude call, the other says the data was fine, just retry the write. Conflating them would make a HubSpot outage look like a broken score.
+
+## Tech stack
+
+- **n8n** (self-hosted on Hetzner) — orchestration: intake, enrichment, scoring, delivery, dead-letters.
+- **Supabase** (Postgres) — source of truth for every lead, RLS-locked, service-role key only.
+- **Claude Haiku** — one structured call per lead: score, evidence, draft email.
+- **HubSpot** (Free tier) — CRM delivery: contact properties, a note with the draft.
+- **Resend** — every alert: intake failures, enrichment failures, malformed scorer output, delivery failures, hot leads.
+- **Vercel** — hosts the Next.js intake form, CI/CD from `main`.
+- **Hetzner + Caddy** — the VPS n8n runs on, HTTPS via Caddy's automatic cert handling.
