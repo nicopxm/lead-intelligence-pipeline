@@ -79,9 +79,9 @@ Sprint 5 — "Loop hardening" (milestone #5, Aug 3–7) was planned since this f
 
 #35 closed 2026-08-03, no implementation — deterministically resolved by #44, as predicted. Its two findings: (1) the over-trigger, closed by #44's fixture re-run (Attio/Clearbit still disqualify with zero Claude calls; Raycast/Superhuman/Framer/Sanity/Photoroom all clear — Sanity now scoring clean every time instead of 60% disqualified); (2) off-config `disqualifier_reason`, already closed earlier by #38's enum-constrained validation. Board auto-set to Done on close — no manual fix needed this time.
 
-Not done in this session (single-piece flow — left for their own sessions): #36/#38 (close once verified — #38's body frames all three as closing together and #35 is now closed, so this is likely just a verification pass, not new implementation), #41/#42 per the Sprint 5 commit order.
+#36 and #38 closed 2026-08-03, no new implementation — their fix was deployed and live-verified back in Sprint 4 (2026-07-28/29: data fence, single-entity + message-wins precedence, `observed_headcount` receipt validation; Ignite Visibility/Aerotek/Grainger/IBM-synthetic cases all verified), and both stayed open only because #38's own body frames #35/#36/#38 as closing together, blocked on #35's competitor axis. #44 didn't touch this fix (separate disqualifier, no model call involved for a competitor-list match), so no re-verification of the grounding logic itself was needed — closure just reflects #35 now being closed. Production state was reconfirmed live the same day before closing #38 (fresh Attio lead through the real webhook, `n8nEventLog.log` execution trace). Board auto-set both to Done on close.
 
-Next: #36/#38 close-out session, then #41/#42.
+The #35/#36/#38/#44 chain from Sprint 4/5 planning is now fully closed. Next: #41 (hot-lead alerts), then #42 (end-to-end verification + review recording) per the Sprint 5 commit order.
 [UPDATE THIS EVERY SESSION]
 
 ## Don't do this
