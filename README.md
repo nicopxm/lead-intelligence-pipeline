@@ -125,3 +125,7 @@ Cost isn't the whole story. The same pipeline that scores a lead for under two c
 - **Resend** — every alert: intake failures, enrichment failures, malformed scorer output, delivery failures, hot leads.
 - **Vercel** — hosts the Next.js intake form, CI/CD from `main`.
 - **Hetzner + Caddy** — the VPS n8n runs on, HTTPS via Caddy's automatic cert handling.
+
+## What I'd do next
+
+Phase 2 is running this against a real client's inbound leads instead of test fixtures: retuning the scoring weights against actual close/no-close outcomes instead of my own judgment calls, and building the reporting dashboard (volume, score distribution, source quality, latency) that's been scoped in the original architecture but never built. The pipeline is ready for that load; what it's missing is real outcome data to tune against.
