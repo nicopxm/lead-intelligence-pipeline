@@ -103,3 +103,15 @@ That range isn't open-ended by luck. Enrichment input is capped at 4,000 charact
 The prompt went through a rewrite mid-project (v1 → v2) to fix a grounding bug: the model was asserting facts, like headcounts, that weren't anywhere in the actual lead data. Grounding every score in evidence and requiring a source quote for size claims raised cost 1.37x on the same five test leads, almost entirely in output tokens, since v2 also drafts for leads v1 used to silently discard before ever scoring them. Still well under budget. Full per-lead numbers and methodology in [docs/COST-ANALYSIS.md](docs/COST-ANALYSIS.md).
 
 Cost isn't the whole story. The same pipeline that scores a lead for under two cents also gets it from form submit to a live HubSpot contact in about 34 seconds, well inside the 90-second target.
+
+## Key decisions and tradeoffs
+
+**Claude Haiku over Sonnet.** One structured call per lead, every time, so cost had to be predictable at volume. Haiku scores the same five dimensions under the same grounding rules for a fraction of Sonnet's price, and lead scoring doesn't need frontier reasoning, it needs consistent extraction against a fixed rubric. Predictable latency mattered too: a 34-second budget doesn't have room for a model that occasionally thinks longer.
+
+**n8n over Zapier or Make.** Priced per workflow execution, not per task, which matters at any real lead volume. It also meant building and debugging real orchestration logic, sub-workflows, retries, dead-letter branches, fire-and-forget execution, instead of chaining prebuilt steps. That's closer to what a RevOps engineering role actually looks like day to day.
+
+**Config-as-data, not code.** The entire ICP, scoring dimensions, weights, thresholds, disqualifiers, sender identity, lives in one JSON file, validated on load and never silently defaulted. Onboarding a second client is writing a new config, not touching the scoring logic itself. Routine tuning, a weight, a threshold, a new disqualifier reason, is a JSON edit and nothing else. It's a bet made before there's a second client to prove it against; the weights themselves are still an unvalidated v1 hypothesis, since the human spot-check meant to tune them against real outcomes got deferred and never actually completed.
+
+**The competitor name-prior experiment.** Covered above under ICP scoring, but it's worth calling out as a decision on its own: when a bug looks like a prompt problem, the fix isn't always a better prompt. I ran a controlled experiment, real name against a scrubbed one, before writing a single line of new prompt, because guessing at the mechanism would have meant iterating on wording that could never fix it.
+
+**Dead-letter without reverting status.** A delivery failure after a lead is already scored doesn't roll the lead back to a redo state. It dead-letters delivery specifically, alerts, and leaves the trustworthy score in place, because a scoring failure and a delivery failure mean different things: one says redo the Claude call, the other says the data was fine, just retry the write. Conflating them would make a HubSpot outage look like a broken score.
